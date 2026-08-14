@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body, html { margin:0; padding:0; height:100%; display:flex; flex-direction:column; background:#000; color:#fff; font-family:sans-serif; }
+        #viewfinder { flex:1; display:flex; align-items:center; justify-content:center; background:#111; position:relative; overflow:hidden; }
+        #video { max-width:100%; max-height:100%; transform:scaleX(-1); }
+        #canvas { display:none; }
+        #overlay { position:absolute; top:0; left:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+        .placeholder { text-align:center; color:#8b949e; }
+        .placeholder .icon { font-size:64px; margin-bottom:12px; }
+        .controls { background:#1a1a2e; padding:16px; display:flex; justify-content:center; gap:16px; border-top:1px solid #30475e; }
+        .cam-btn { background:#3a82f2; border:none; color:#fff; width:56px; height:56px; border-radius:50%; cursor:pointer; font-size:24px; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(58,130,242,0.4); }
+        .cam-btn:hover { background:#5599ff; }
+        .cam-btn.secondary { background:#30475e; width:44px; height:44px; font-size:18px; }
+        .gallery-strip { background:#16213e; padding:8px; display:flex; gap:8px; overflow-x:auto; max-height:80px; border-top:1px solid #30475e; }
+        .thumb { width:64px; height:64px; border-radius:4px; object-fit:cover; cursor:pointer; border:2px solid transparent; }
+        .thumb:hover { border-color:#3a82f2; }
+        .filter-bar { background:#16213e; padding:8px 16px; display:flex; gap:8px; justify-content:center; border-top:1px solid #30475e; }
+        .filter { padding:4px 12px; background:#30475e; border:none; color:#fff; border-radius:16px; cursor:pointer; font-size:11px; }
+        .filter.active { background:#3a82f2; }
+    </style>
+</head>
+<body>
+    <div id="viewfinder">
+        <video id="video" autoplay playsinline></video>
+        <canvas id="canvas"></canvas>
+        <div id="overlay">
+            <div class="placeholder">
+                <div class="icon">📷</div>
+                <div>Click the button below to start your camera</div>
+            </div>
+        </div>
+    </div>
+    <div class="filter-bar">
+        <button class="filter active" onclick="setFilter('none', this)">Normal</button>
+        <button class="filter" onclick="setFilter('grayscale(100%)', this)">B&W</button>
+        <button class="filter" onclick="setFilter('sepia(100%)', this)">Sepia</button>
+        <button class="filter" onclick="setFilter('invert(100%)', this)">Invert</button>
+        <button class="filter" onclick="setFilter('contrast(200%) saturate(200%)', this)">Vivid</button>
+    </div>
+    <div class="controls">
+        <button class="cam-btn secondary" onclick="toggleCamera()">🎥</button>
+        <button class="cam-btn" onclick="capture()">📸</button>
+        <button class="cam-btn secondary" onclick="switchCamera()">🔄</button>
+    </div>
+    <div class="gallery-strip" id="gallery-strip"></div>
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const overlay = document.getElementById('overlay');
+        let stream = null;
+        let currentFilter = 'none';
+        const photos = [];
+        let facingMode = 'user';
+
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
+                video.srcObject = stream;
+                video.style.filter = currentFilter;
+                overlay.style.display = 'none';
+            } catch (e) {
+                overlay.querySelector('.placeholder').innerHTML = '<div class="icon">⚠️</div><div>Camera access denied or unavailable.<br>Use the capture button to simulate a photo.</div>';
+            }
+        }
+
+        function toggleCamera() {
+            if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; video.srcObject = null; overlay.style.display = 'flex'; }
+            else startCamera();
+        }
+
+        function switchCamera() {
+            facingMode = facingMode === 'user' ? 'environment' : 'user';
+            if (stream) { stream.getTracks().forEach(t => t.stop()); startCamera(); }
+        }
+
+        function setFilter(f, btn) {
+            currentFilter = f;
+            video.style.filter = f;
+            document.querySelectorAll('.filter').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+
+        function capture() {
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            ctx.filter = currentFilter;
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+            if (stream) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            else { ctx.fillStyle = '#1a3a6e'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#fff'; ctx.font='20px sans-serif'; ctx.textAlign='center'; ctx.fillText('Simulated Photo', canvas.width/2, canvas.height/2); }
+            ctx.setTransform(1,0,0,1,0,0); ctx.filter = 'none';
+            const dataUrl = canvas.toDataURL('image/png');
+            photos.push(dataUrl);
+            renderGallery();
+        }
+
+        function renderGallery() {
+            const strip = document.getElementById('gallery-strip');
+            strip.innerHTML = '';
+            photos.forEach((p, i) => {
+                const img = document.createElement('img');
+                img.src = p; img.className = 'thumb';
+                img.onclick = () => { const a = document.createElement('a'); a.href = p; a.download = `bliss-photo-${i}.png`; a.click(); };
+                strip.appendChild(img);
+            });
+        }
+    </script>
+</body>
+</html>

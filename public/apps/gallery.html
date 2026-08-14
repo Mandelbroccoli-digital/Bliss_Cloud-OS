@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body, html { margin:0; padding:0; height:100%; display:flex; flex-direction:column; background:#1a1a2e; color:#fff; font-family:sans-serif; }
+        .gallery-header { background:#16213e; padding:12px 16px; border-bottom:1px solid #30475e; display:flex; justify-content:space-between; align-items:center; }
+        .gallery-header h2 { font-size:16px; }
+        .upload-btn { background:#3a82f2; border:none; color:#fff; padding:6px 14px; border-radius:4px; cursor:pointer; font-size:12px; }
+        .upload-btn:hover { background:#5599ff; }
+        #grid { flex:1; overflow-y:auto; padding:12px; display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:12px; align-content:start; }
+        .photo-card { background:#16213e; border-radius:8px; overflow:hidden; cursor:pointer; transition:transform 0.15s; }
+        .photo-card:hover { transform:scale(1.03); }
+        .photo-card img { width:100%; height:120px; object-fit:cover; display:block; }
+        .photo-card .meta { padding:6px 8px; font-size:11px; color:#8b949e; }
+        #lightbox { position:fixed; inset:0; background:rgba(0,0,0,0.9); display:none; align-items:center; justify-content:center; z-index:9999; flex-direction:column; gap:12px; }
+        #lightbox img { max-width:90%; max-height:80vh; border-radius:8px; }
+        #lightbox .close { position:absolute; top:16px; right:16px; color:#fff; font-size:28px; cursor:pointer; background:rgba(255,255,255,0.1); width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
+        .empty { text-align:center; color:#8b949e; padding:40px; grid-column:1/-1; }
+        .empty .icon { font-size:48px; margin-bottom:12px; }
+    </style>
+</head>
+<body>
+    <div class="gallery-header">
+        <h2>🖼️ Gallery</h2>
+        <label class="upload-btn">📁 Upload<input type="file" accept="image/*" multiple style="display:none;" onchange="loadImages(this.files)"></label>
+    </div>
+    <div id="grid">
+        <div class="empty">
+            <div class="icon">🖼️</div>
+            <div>No photos yet. Upload images to get started.</div>
+        </div>
+    </div>
+    <div id="lightbox">
+        <div class="close" onclick="closeLightbox()">&#x2715;</div>
+        <img id="lightbox-img" src="">
+        <div style="color:#8b949e;font-size:12px;" id="lightbox-meta"></div>
+    </div>
+    <script>
+        const photos = [];
+
+        function loadImages(files) {
+            for (const f of files) {
+                photos.push({ name: f.name, url: URL.createObjectURL(f), size: (f.size/1024).toFixed(0) + ' KB' });
+            }
+            renderGrid();
+        }
+
+        function renderGrid() {
+            const grid = document.getElementById('grid');
+            if (photos.length === 0) {
+                grid.innerHTML = '<div class="empty"><div class="icon">🖼️</div><div>No photos yet. Upload images to get started.</div></div>';
+                return;
+            }
+            grid.innerHTML = '';
+            photos.forEach((p, i) => {
+                const card = document.createElement('div');
+                card.className = 'photo-card';
+                card.innerHTML = `<img src="${p.url}"><div class="meta">${p.name} · ${p.size}</div>`;
+                card.onclick = () => openLightbox(i);
+                grid.appendChild(card);
+            });
+        }
+
+        function openLightbox(i) {
+            const lb = document.getElementById('lightbox');
+            document.getElementById('lightbox-img').src = photos[i].url;
+            document.getElementById('lightbox-meta').textContent = `${photos[i].name} · ${photos[i].size}`;
+            lb.style.display = 'flex';
+        }
+
+        function closeLightbox() { document.getElementById('lightbox').style.display = 'none'; }
+        document.getElementById('lightbox').addEventListener('click', e => { if (e.target.id === 'lightbox') closeLightbox(); });
+    </script>
+</body>
+</html>

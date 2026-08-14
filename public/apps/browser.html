@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body, html { margin:0; padding:0; height:100%; display:flex; flex-direction:column; background:#fff; font-family:sans-serif; font-size:12px; }
+        .toolbar { background:#ece9d8; border-bottom:1px solid #999; padding:4px 8px; display:flex; gap:6px; align-items:center; }
+        .nav-btn { background:#e1dfd3; border:1px solid #7f9db9; padding:3px 10px; cursor:pointer; font-size:12px; }
+        .nav-btn:hover { background:#d4d0c4; }
+        .url-bar { flex:1; border:1px solid #7f9db9; padding:3px 6px; font-size:12px; outline:none; }
+        #content { flex:1; border:none; background:#fff; }
+        .bookmarks { display:flex; gap:6px; padding:4px 8px; background:#f1efe2; border-bottom:1px solid #ccc; }
+        .bm { font-size:11px; color:#004eae; cursor:pointer; text-decoration:underline; }
+        .bm:hover { color:#e44d32; }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button class="nav-btn" onclick="goBack()">⬅</button>
+        <button class="nav-btn" onclick="goForward()">➡</button>
+        <button class="nav-btn" onclick="goHome()">🏠</button>
+        <button class="nav-btn" onclick="reload()">🔄</button>
+        <input type="text" id="url" class="url-bar" placeholder="Enter URL or search..." onkeydown="if(event.key==='Enter')navigate()">
+        <button class="nav-btn" onclick="navigate()">Go</button>
+    </div>
+    <div class="bookmarks">
+        <span class="bm" onclick="navigateTo('https://wikipedia.org')">Wikipedia</span>
+        <span class="bm" onclick="navigateTo('https://example.com')">Example.com</span>
+        <span class="bm" onclick="showStartPage()">Start Page</span>
+    </div>
+    <iframe id="content" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+    <script>
+        const iframe = document.getElementById('content');
+        const urlInput = document.getElementById('url');
+        let history = [];
+        let hIndex = -1;
+
+        function showStartPage() {
+            iframe.srcdoc = `<!DOCTYPE html><html><head><style>
+            body{font-family:sans-serif;background:linear-gradient(135deg,#1a3a6e,#0a1628);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;}
+            h1{font-size:48px;margin-bottom:8px;} p{color:rgba(255,255,255,0.6);margin-bottom:24px;}
+            .links{display:flex;gap:20px;flex-wrap:wrap;justify-content:center;max-width:400px;}
+            a{color:#3a82f2;text-decoration:none;font-size:14px;padding:10px 20px;border:1px solid rgba(255,255,255,0.2);border-radius:6px;}
+            a:hover{background:rgba(255,255,255,0.1);}
+            </style></head><body>
+            <h1>🌐 Bliss Browser</h1><p>CloudOS Web Gateway</p>
+            <div class="links">
+            <a href="https://wikipedia.org" target="_blank">Wikipedia</a>
+            <a href="https://example.com" target="_blank">Example</a>
+            </div></body></html>`;
+            urlInput.value = '';
+        }
+
+        function navigateTo(url) {
+            urlInput.value = url;
+            navigate();
+        }
+
+        function navigate() {
+            let url = urlInput.value.trim();
+            if (!url) return;
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                if (url.includes('.') && !url.includes(' ')) url = 'https://' + url;
+                else url = 'https://www.google.com/search?q=' + encodeURIComponent(url);
+            }
+            iframe.src = url;
+            hIndex++;
+            history = history.slice(0, hIndex);
+            history.push(url);
+        }
+
+        function goBack() { if (hIndex > 0) { hIndex--; iframe.src = history[hIndex]; urlInput.value = history[hIndex]; } }
+        function goForward() { if (hIndex < history.length - 1) { hIndex++; iframe.src = history[hIndex]; urlInput.value = history[hIndex]; } }
+        function goHome() { showStartPage(); }
+        function reload() { if (iframe.src) iframe.src = iframe.src; }
+
+        showStartPage();
+    </script>
+</body>
+</html>

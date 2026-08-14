@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body, html { margin:0; padding:0; height:100%; background:#0c0c0c; color:#0f0; font-family:monospace; font-size:13px; overflow:hidden; display:flex; flex-direction:column; }
+        #output { flex:1; overflow-y:auto; padding:10px; white-space:pre-wrap; word-break:break-all; }
+        .line { margin-bottom:2px; }
+        .err { color:#f85149; }
+        .info { color:#58a6ff; }
+        .gold { color:#ffb703; }
+        #input-bar { display:flex; align-items:center; background:#161b22; border-top:1px solid #30363d; padding:6px 10px; }
+        .prompt { color:#3a82f2; margin-right:8px; font-weight:bold; }
+        #input { flex:1; background:transparent; border:none; outline:none; color:#f0f6fc; font-family:monospace; font-size:13px; }
+    </style>
+</head>
+<body>
+    <div id="output"></div>
+    <div id="input-bar">
+        <span class="prompt">bliss@os:~$</span>
+        <input type="text" id="input" autofocus placeholder="Type 'help' to begin...">
+    </div>
+    <script>
+        const out = document.getElementById('output');
+        const inp = document.getElementById('input');
+        const fs = { '/home/bliss': ['documents','projects','readme.txt'], '/': ['bin','etc','home','var','tmp'] };
+        let cwd = '/home/bliss';
+        let history = [];
+        let hIdx = 0;
+
+        function print(text, cls) {
+            const d = document.createElement('div');
+            d.className = 'line ' + (cls||'');
+            d.textContent = text;
+            out.appendChild(d);
+            out.scrollTop = out.scrollHeight;
+        }
+
+        function printHTML(html) {
+            const d = document.createElement('div');
+            d.className = 'line';
+            d.innerHTML = html;
+            out.appendChild(d);
+            out.scrollTop = out.scrollHeight;
+        }
+
+        const commands = {
+            help: () => {
+                print('Available commands:', 'info');
+                print('  help        Show this help');
+                print('  ls          List directory contents');
+                print('  pwd         Print working directory');
+                print('  cd <dir>    Change directory');
+                print('  echo <txt>  Print text');
+                print('  clear       Clear terminal');
+                print('  neofetch    System info');
+                print('  date        Current date/time');
+                print('  whoami      Current user');
+                print('  mali        Mali kernel status');
+                print('  cat <file>  Read file');
+            },
+            ls: () => {
+                const items = fs[cwd] || fs['/'] || [];
+                items.forEach(i => print(i.startsWith('.') || i.includes('.') ? `📄 ${i}` : `📁 ${i}`));
+            },
+            pwd: () => print(cwd),
+            cd: (args) => {
+                if (!args[0]) { cwd = '/home/bliss'; return; }
+                if (args[0] === '..') { cwd = cwd.split('/').slice(0,-1).join('/') || '/'; return; }
+                const target = cwd === '/' ? '/' + args[0] : cwd + '/' + args[0];
+                if (fs[target]) cwd = target; else print(`cd: ${args[0]}: No such directory`, 'err');
+            },
+            echo: (args) => print(args.join(' ')),
+            clear: () => out.innerHTML = '',
+            neofetch: () => {
+                printHTML('<span class="gold">       🌀 BLISS OS v0.0.9</span>');
+                print('  Kernel:    CloudOS Subkernel');
+                print('  Shell:     bliss-sh 1.0');
+                print('  Runtime:   Mali 2.2B Local');
+                print('  SML Phase:  Citrinitas');
+                print('  Uptime:    ' + Math.floor(performance.now()/1000) + 's');
+                print('  Memory:    ' + (performance.memory ? Math.round(performance.memory.usedJSHeapSize/1048576) + ' MB' : 'N/A'));
+            },
+            date: () => print(new Date().toString()),
+            whoami: () => print('bliss'),
+            mali: () => {
+                print('[Mali 2.2B] Kernel status: ACTIVE', 'gold');
+                print('[Mali 2.2B] SML markers: aligned');
+                print('[Mali 2.2B] Subprocess limits: disabled');
+                print('[Mali 2.2B] Transmutation pipeline: ready', 'gold');
+            },
+            cat: (args) => {
+                if (!args[0]) { print('cat: missing file', 'err'); return; }
+                if (args[0] === 'readme.txt') print('Welcome to Bliss OS!\nThis is a cloud-native operating system.\nVersion 0.0.9 — Subkernel build.');
+                else print(`cat: ${args[0]}: No such file`, 'err');
+            }
+        };
+
+        function exec(cmd) {
+            print(`bliss@os:~$ ${cmd}`);
+            const parts = cmd.trim().split(/\s+/);
+            const c = parts[0].toLowerCase();
+            const args = parts.slice(1);
+            if (commands[c]) commands[c](args);
+            else if (c) print(`bliss-sh: ${c}: command not found`, 'err');
+        }
+
+        inp.addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+                const cmd = inp.value;
+                if (cmd.trim()) { history.push(cmd); hIdx = history.length; }
+                exec(cmd);
+                inp.value = '';
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (hIdx > 0) { hIdx--; inp.value = history[hIdx] || ''; }
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (hIdx < history.length) { hIdx++; inp.value = history[hIdx] || ''; }
+            }
+        });
+
+        print('Bliss OS Terminal [Version 0.0.9]', 'info');
+        print('CloudOS Subkernel — Mali 2.2B Local Runtime', 'gold');
+        print('Type \'help\' for available commands.\n');
+    </script>
+</body>
+</html>

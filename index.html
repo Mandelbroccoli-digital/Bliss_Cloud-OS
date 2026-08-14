@@ -1,13 +1,422 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="initial-scale=1, width=device-width" />
-    <title data-default>MUI Design System</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bliss OS v0.0.9 // CloudOS Subkernel</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <style>
+        :root {
+            --xp-taskbar: linear-gradient(to bottom, #245edb 0%, #3971ed 10%, #1741b8 100%);
+            --xp-start: linear-gradient(to bottom, #388238 0%, #62b262 10%, #296029 100%);
+            --win-bg: #ece9d8;
+            --win-border: #004eae;
+            --xp-gray: #f1efe2;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Tahoma", "Segoe UI", sans-serif; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background-color: #003399; user-select: none; }
+
+        #desktop {
+            width: 100%; height: calc(100% - 30px);
+            background: linear-gradient(135deg, #1a4a8a 0%, #2a6ac4 50%, #1a4a8a 100%);
+            position: relative; padding: 15px;
+            display: grid; grid-template-columns: repeat(auto-fill, 90px);
+            grid-template-rows: repeat(auto-fill, 90px); grid-auto-flow: column; gap: 12px;
+            overflow: hidden;
+        }
+
+        .shortcut {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            text-align: center; cursor: pointer; color: white; font-size: 11px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.9); border: 1px solid transparent;
+            border-radius: 3px; padding: 6px 3px; transition: background 0.1s;
+        }
+        .shortcut:hover { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); }
+        .shortcut span.icon { font-size: 32px; margin-bottom: 6px; filter: drop-shadow(1px 2px 2px rgba(0,0,0,0.5)); display: block; }
+
+        .window {
+            position: absolute; width: 700px; height: 500px; background: var(--xp-gray);
+            border: 3px solid var(--win-border); border-top-left-radius: 8px; border-top-right-radius: 8px;
+            box-shadow: 4px 4px 12px rgba(0,0,0,0.35); display: flex; flex-direction: column; z-index: 10;
+            min-width: 350px; min-height: 250px;
+        }
+        .window.maximized { width: 100% !important; height: calc(100% - 30px) !important; top: 0 !important; left: 0 !important; }
+        .window.minimized { display: none !important; }
+
+        .title-bar {
+            background: linear-gradient(to right, #0058e6 0%, #3a82f2 10%, #0058e6 100%);
+            color: white; padding: 4px 8px; font-weight: bold; font-size: 12px;
+            display: flex; justify-content: space-between; align-items: center; cursor: move; height: 26px;
+            border-top-left-radius: 5px; border-top-right-radius: 5px; flex-shrink: 0;
+        }
+        .title-bar span { display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .title-controls { display: flex; gap: 3px; align-items: center; flex-shrink: 0; }
+        .title-controls button {
+            width: 18px; height: 18px; font-size: 9px; font-weight: bold; border: 1px solid rgba(255,255,255,0.6);
+            border-radius: 3px; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;
+            background: linear-gradient(to bottom, #5599ff 0%, #1148cc 100%);
+        }
+        .title-controls button:hover { opacity: 0.85; }
+        .btn-close { background: linear-gradient(to bottom, #e44d32 0%, #cc1600 100%) !important; }
+
+        .window-body { flex: 1; overflow: hidden; background: #fff; position: relative; display: flex; flex-direction: column; }
+        .app-iframe { width: 100%; height: 100%; border: none; background: #fff; }
+        .resizer { width: 14px; height: 14px; background: transparent; position: absolute; right: 0; bottom: 0; cursor: se-resize; z-index: 999; }
+
+        #taskbar {
+            width: 100%; height: 30px; background: var(--xp-taskbar); position: absolute; bottom: 0; left: 0;
+            display: flex; align-items: center; justify-content: space-between; z-index: 99999; border-top: 1px solid #3d7bad;
+        }
+        .taskbar-left { display: flex; align-items: center; height: 100%; flex: 1; overflow: hidden; }
+        #start-btn {
+            height: 100%; padding: 0 14px 0 8px; background: var(--xp-start); color: white; font-style: italic;
+            font-weight: bold; font-size: 13px; border: none; border-top-right-radius: 10px; border-bottom-right-radius: 10px;
+            box-shadow: 3px 0 6px rgba(0,0,0,0.4); cursor: pointer; display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+        }
+        .active-tasks { display: flex; align-items: center; gap: 4px; padding-left: 8px; height: 100%; overflow: hidden; }
+        .task-tab {
+            background: rgba(255,255,255,0.12); color: white; border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 3px; height: 22px; padding: 0 8px; font-size: 11px;
+            display: flex; align-items: center; gap: 4px; cursor: pointer; max-width: 130px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0;
+        }
+        .task-tab:hover { background: rgba(255,255,255,0.22); }
+        .task-tab.active-win { background: rgba(0,0,0,0.25); font-weight: bold; border-color: rgba(255,255,255,0.4); }
+
+        .system-tray {
+            background: linear-gradient(to bottom, #0c8df6 0%, #1067bc 100%);
+            padding: 0 12px; height: 100%; display: flex; align-items: center; color: white; font-size: 11px; gap: 8px;
+            border-left: 1px solid rgba(255,255,255,0.15); flex-shrink: 0;
+        }
+        .tray-icon { font-size: 14px; cursor: pointer; opacity: 0.85; }
+        .tray-icon:hover { opacity: 1; }
+
+        #start-menu {
+            position: absolute; bottom: 30px; left: 0; width: 320px;
+            background: linear-gradient(to right, #1558d0 0%, #1558d0 30%, #ecebdf 30%);
+            border: 2px solid #003b8e; z-index: 99999; display: none;
+            box-shadow: 4px -4px 12px rgba(0,0,0,0.5); border-top-right-radius: 8px;
+            flex-direction: column; overflow: hidden;
+        }
+        .start-header {
+            background: linear-gradient(135deg, #1d5cc8 0%, #3a82f2 100%);
+            padding: 12px 14px; color: white; font-size: 14px; font-weight: bold;
+            display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #0040a8;
+        }
+        .start-header .os-logo { font-size: 28px; }
+        .start-header-text { display: flex; flex-direction: column; }
+        .start-header-text span:first-child { font-size: 15px; }
+        .start-header-text span:last-child { font-size: 10px; opacity: 0.8; letter-spacing: 1px; }
+        .start-items { padding: 8px 0; display: flex; flex-direction: column; background: #ecebdf; }
+        .start-item {
+            padding: 6px 14px; cursor: pointer; display: flex; align-items: center; gap: 10px;
+            font-size: 12px; color: #1a1a1a; background: transparent;
+        }
+        .start-item:hover { background: #3169c8; color: white; }
+        .start-item .si-icon { font-size: 20px; width: 24px; text-align: center; }
+        .start-sep { height: 1px; background: #c0bdb4; margin: 4px 12px; }
+
+        #ctx-menu {
+            position: absolute; background: #ecebdf; border: 1px solid #7f9db9;
+            box-shadow: 2px 2px 6px rgba(0,0,0,0.25); z-index: 999999; display: none; min-width: 160px; padding: 3px 0;
+        }
+        .ctx-item { padding: 5px 18px; font-size: 12px; cursor: pointer; }
+        .ctx-item:hover { background: #3169c8; color: white; }
+        .ctx-sep { height: 1px; background: #c0bdb4; margin: 3px 8px; }
+
+        #login-screen {
+            position: fixed; inset: 0; background: linear-gradient(135deg, #0a1628 0%, #1a3a6e 50%, #0a1628 100%);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 999999; gap: 24px;
+        }
+        .login-logo { font-size: 64px; animation: spin-slow 8s linear infinite; }
+        @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .login-title { color: white; font-size: 32px; font-weight: bold; letter-spacing: 4px; text-shadow: 0 0 20px rgba(100,160,255,0.8); }
+        .login-sub { color: rgba(255,255,255,0.6); font-size: 12px; letter-spacing: 3px; }
+        .login-btn {
+            background: linear-gradient(to bottom, #3a82f2 0%, #1148cc 100%);
+            color: white; border: 1px solid rgba(255,255,255,0.3); padding: 10px 32px;
+            font-size: 14px; cursor: pointer; border-radius: 4px; margin-top: 8px;
+            box-shadow: 0 4px 16px rgba(58,130,242,0.5);
+        }
+        .login-btn:hover { background: linear-gradient(to bottom, #5599ff 0%, #2255dd 100%); }
+        .login-version { color: rgba(255,255,255,0.3); font-size: 10px; letter-spacing: 2px; }
+    </style>
+  <meta property="og:image" content="https://bolt.new/static/og_default.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://bolt.new/static/og_default.png">
+</head>
+<body>
+
+<div id="login-screen">
+    <div class="login-logo">🌀</div>
+    <div class="login-title">BLISS OS</div>
+    <div class="login-sub">CLOUD OPERATING SYSTEM // SUBKERNEL v0.0.9</div>
+    <button class="login-btn" onclick="bootDesktop()">ENTER WORKSPACE</button>
+    <div class="login-version">KERNEL BUILD 2025.08 // ALL MODULES LOADED</div>
+</div>
+
+<div id="desktop" style="display:none">
+    <div class="shortcut" ondblclick="launchApp('explorer')"><span class="icon">🖥️</span>Explorer</div>
+    <div class="shortcut" ondblclick="launchApp('terminal')"><span class="icon">💻</span>Terminal</div>
+    <div class="shortcut" ondblclick="launchApp('notepad')"><span class="icon">📃</span>Notepad</div>
+    <div class="shortcut" ondblclick="launchApp('code')"><span class="icon">📝</span>Code Studio</div>
+    <div class="shortcut" ondblclick="launchApp('chorus-editor')"><span class="icon">🎼</span>Chorus Editor</div>
+    <div class="shortcut" ondblclick="launchApp('browser')"><span class="icon">🌎</span>Browser</div>
+    <div class="shortcut" ondblclick="launchApp('paint')"><span class="icon">🎨</span>Paint</div>
+    <div class="shortcut" ondblclick="launchApp('player')"><span class="icon">🎵</span>Player</div>
+    <div class="shortcut" ondblclick="launchApp('camera')"><span class="icon">📷</span>Camera</div>
+    <div class="shortcut" ondblclick="launchApp('gallery')"><span class="icon">🖼️</span>Gallery</div>
+    <div class="shortcut" ondblclick="launchApp('hub')"><span class="icon">🌀</span>Ouro-Hub</div>
+    <div class="shortcut" ondblclick="launchApp('ollama')"><span class="icon">🦙</span>Ollama AI</div>
+    <div class="shortcut" ondblclick="launchApp('settings')"><span class="icon">⚙️</span>Settings</div>
+    <div class="shortcut" ondblclick="launchApp('subkernel')"><span class="icon">⚡</span>Subkernel</div>
+</div>
+
+<div id="taskbar" style="display:none">
+    <div class="taskbar-left">
+        <button id="start-btn" onclick="toggleStartMenu()">
+            <svg width="14" height="14" viewBox="0 0 24 24">
+                <rect x="3" y="3" width="8" height="8" rx="1.5" fill="#52B052"/>
+                <rect x="13" y="3" width="8" height="8" rx="1.5" fill="#f2a900"/>
+                <rect x="3" y="13" width="8" height="8" rx="1.5" fill="#3a82f2"/>
+                <rect x="13" y="13" width="8" height="8" rx="1.5" fill="#e44d32"/>
+            </svg>
+            start
+        </button>
+        <div class="active-tasks" id="taskbar-tabs"></div>
+    </div>
+    <div class="system-tray">
+        <span class="tray-icon" title="Network">🌐</span>
+        <span class="tray-icon" title="Volume">🔊</span>
+        <span class="tray-icon" title="Battery">🔋</span>
+        <span id="tray-clock">12:00 PM</span>
+    </div>
+</div>
+
+<div id="start-menu">
+    <div class="start-header">
+        <span class="os-logo">🌀</span>
+        <div class="start-header-text"><span>Bliss OS</span><span>v0.0.9 SUBKERNEL</span></div>
+    </div>
+    <div class="start-items">
+        <div class="start-item" onclick="launchApp('explorer');closeStartMenu()"><span class="si-icon">🖥️</span>File Explorer</div>
+        <div class="start-item" onclick="launchApp('terminal');closeStartMenu()"><span class="si-icon">💻</span>Terminal</div>
+        <div class="start-item" onclick="launchApp('notepad');closeStartMenu()"><span class="si-icon">📃</span>Notepad</div>
+        <div class="start-item" onclick="launchApp('code');closeStartMenu()"><span class="si-icon">📝</span>Code Studio</div>
+        <div class="start-item" onclick="launchApp('chorus-editor');closeStartMenu()"><span class="si-icon">🎼</span>Chorus Editor</div>
+        <div class="start-sep"></div>
+        <div class="start-item" onclick="launchApp('browser');closeStartMenu()"><span class="si-icon">🌎</span>Web Browser</div>
+        <div class="start-item" onclick="launchApp('paint');closeStartMenu()"><span class="si-icon">🎨</span>Canvas Paint</div>
+        <div class="start-item" onclick="launchApp('player');closeStartMenu()"><span class="si-icon">🎵</span>Media Player</div>
+        <div class="start-item" onclick="launchApp('camera');closeStartMenu()"><span class="si-icon">📷</span>Camera</div>
+        <div class="start-item" onclick="launchApp('gallery');closeStartMenu()"><span class="si-icon">🖼️</span>Gallery</div>
+        <div class="start-sep"></div>
+        <div class="start-item" onclick="launchApp('hub');closeStartMenu()"><span class="si-icon">🌀</span>Ouro-Hub</div>
+        <div class="start-item" onclick="launchApp('ollama');closeStartMenu()"><span class="si-icon">🦙</span>Ollama AI Bridge</div>
+        <div class="start-item" onclick="launchApp('subkernel');closeStartMenu()"><span class="si-icon">⚡</span>Subkernel</div>
+        <div class="start-sep"></div>
+        <div class="start-item" onclick="launchApp('settings');closeStartMenu()"><span class="si-icon">⚙️</span>Settings</div>
+        <div class="start-item" onclick="lockScreen()"><span class="si-icon">🔒</span>Lock Screen</div>
+    </div>
+</div>
+
+<div id="ctx-menu">
+    <div class="ctx-item" onclick="closeCtxMenu()">Refresh Desktop</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" onclick="launchApp('settings');closeCtxMenu()">Display Settings</div>
+    <div class="ctx-item" onclick="launchApp('terminal');closeCtxMenu()">Open Terminal</div>
+</div>
+
+<div id="root" style="display:none"></div>
+<script type="module" src="/src/main.tsx"></script>
+<script>
+let topZ = 10;
+const openWindows = new Map();
+
+const APP_TITLES = {
+    explorer: '🖥️ File Explorer', terminal: '💻 Terminal', notepad: '📃 Notepad',
+    code: '📝 Code Studio', 'chorus-editor': '🎼 Chorus Editor',
+    browser: '🌎 Web Browser', paint: '🎨 Canvas Paint', player: '🎵 Media Player',
+    camera: '📷 Camera', gallery: '🖼️ Gallery', hub: '🌀 Ouro-Hub',
+    ollama: '🦙 Ollama AI', settings: '⚙️ Settings', subkernel: '⚡ Subkernel'
+};
+
+const APP_SIZES = {
+    'chorus-editor': [900, 600], 'code': [900, 600], 'browser': [800, 580],
+    'paint': [800, 560], 'player': [480, 360], 'camera': [560, 460],
+    'gallery': [720, 520], 'hub': [700, 520], 'ollama': [640, 500],
+    'settings': [560, 440], 'subkernel': [680, 500], 'terminal': [680, 440],
+    'explorer': [640, 460], 'notepad': [560, 420]
+};
+
+function bootDesktop() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('desktop').style.display = 'grid';
+    document.getElementById('taskbar').style.display = 'flex';
+}
+
+function lockScreen() {
+    closeStartMenu();
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('desktop').style.display = 'none';
+    document.getElementById('taskbar').style.display = 'none';
+}
+
+function updateClock() {
+    const now = new Date();
+    let h = now.getHours(), m = String(now.getMinutes()).padStart(2,'0');
+    const ap = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    document.getElementById('tray-clock').textContent = `${h}:${m} ${ap}`;
+}
+setInterval(updateClock, 1000); updateClock();
+
+function launchApp(id) {
+    closeStartMenu(); closeCtxMenu();
+    if (openWindows.has(id)) {
+        const win = openWindows.get(id);
+        win.classList.remove('minimized');
+        focusWindow(id);
+        return;
+    }
+    const [w, h] = APP_SIZES[id] || [700, 500];
+    const offset = (openWindows.size % 8) * 26;
+    const win = document.createElement('div');
+    win.id = 'win-' + id;
+    win.className = 'window';
+    win.style.cssText = `width:${w}px;height:${h}px;left:${50+offset}px;top:${40+offset}px`;
+    win.innerHTML = `
+        <div class="title-bar">
+            <span>${APP_TITLES[id] || id}</span>
+            <div class="title-controls">
+                <button title="Minimize" onclick="minimizeWin('${id}')">&#x2013;</button>
+                <button title="Maximize" onclick="maximizeWin('${id}')">&#x25A1;</button>
+                <button class="btn-close" title="Close" onclick="closeWin('${id}')">&#x2715;</button>
+            </div>
+        </div>
+        <div class="window-body">
+            <iframe class="app-iframe" src="apps/${id}.html" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-downloads allow-popups"></iframe>
+            <div class="resizer"></div>
+        </div>`;
+    document.getElementById('desktop').appendChild(win);
+    openWindows.set(id, win);
+    initDrag(win, id);
+    initResize(win);
+    focusWindow(id);
+    renderTabs();
+}
+
+function focusWindow(id) {
+    topZ++;
+    const win = openWindows.get(id);
+    if (win) win.style.zIndex = topZ;
+    renderTabs();
+}
+
+function minimizeWin(id) {
+    const win = openWindows.get(id);
+    if (win) win.classList.add('minimized');
+    renderTabs();
+}
+
+function maximizeWin(id) {
+    const win = openWindows.get(id);
+    if (win) win.classList.toggle('maximized');
+}
+
+function closeWin(id) {
+    const win = openWindows.get(id);
+    if (win) { win.remove(); openWindows.delete(id); }
+    renderTabs();
+}
+
+function renderTabs() {
+    const bar = document.getElementById('taskbar-tabs');
+    bar.innerHTML = '';
+    openWindows.forEach((win, id) => {
+        const isTop = parseInt(win.style.zIndex) === topZ;
+        const isMin = win.classList.contains('minimized');
+        const tab = document.createElement('div');
+        tab.className = 'task-tab' + (isTop && !isMin ? ' active-win' : '');
+        tab.textContent = (APP_TITLES[id] || id).replace(/^.\s/, '');
+        tab.title = APP_TITLES[id] || id;
+        tab.onclick = () => {
+            if (isMin) { win.classList.remove('minimized'); focusWindow(id); }
+            else if (isTop) minimizeWin(id);
+            else focusWindow(id);
+        };
+        bar.appendChild(tab);
+    });
+}
+
+function initDrag(win, id) {
+    const tb = win.querySelector('.title-bar');
+    tb.onmousedown = e => {
+        if (e.target.tagName === 'BUTTON' || win.classList.contains('maximized')) return;
+        focusWindow(id);
+        const sx = e.clientX - win.offsetLeft, sy = e.clientY - win.offsetTop;
+        const mask = document.createElement('div');
+        mask.style.cssText = 'position:fixed;inset:0;z-index:999999';
+        document.body.appendChild(mask);
+        document.onmousemove = e => {
+            win.style.left = Math.max(0, e.clientX - sx) + 'px';
+            win.style.top  = Math.max(0, e.clientY - sy) + 'px';
+        };
+        document.onmouseup = () => { mask.remove(); document.onmousemove = document.onmouseup = null; };
+    };
+    tb.ondblclick = e => { if (e.target.tagName !== 'BUTTON') maximizeWin(id); };
+    win.onmousedown = () => focusWindow(id);
+}
+
+function initResize(win) {
+    const r = win.querySelector('.resizer');
+    r.onmousedown = e => {
+        e.preventDefault(); e.stopPropagation();
+        const iw = win.offsetWidth, ih = win.offsetHeight, sx = e.clientX, sy = e.clientY;
+        const mask = document.createElement('div');
+        mask.style.cssText = 'position:fixed;inset:0;z-index:999999;cursor:se-resize';
+        document.body.appendChild(mask);
+        document.onmousemove = e => {
+            win.style.width  = Math.max(350, iw + e.clientX - sx) + 'px';
+            win.style.height = Math.max(250, ih + e.clientY - sy) + 'px';
+        };
+        document.onmouseup = () => { mask.remove(); document.onmousemove = document.onmouseup = null; };
+    };
+}
+
+function toggleStartMenu() {
+    const m = document.getElementById('start-menu');
+    m.style.display = m.style.display === 'flex' ? 'none' : 'flex';
+}
+function closeStartMenu() { document.getElementById('start-menu').style.display = 'none'; }
+function closeCtxMenu()   { document.getElementById('ctx-menu').style.display = 'none'; }
+
+document.getElementById('desktop').addEventListener('contextmenu', e => {
+    if (e.target.id === 'desktop' || e.target.closest('#desktop') === document.getElementById('desktop')) {
+        e.preventDefault();
+        const m = document.getElementById('ctx-menu');
+        m.style.cssText = `display:block;left:${e.clientX}px;top:${Math.min(e.clientY, window.innerHeight - 120)}px`;
+    }
+});
+
+document.addEventListener('click', e => {
+    if (!e.target.closest('#start-btn') && !e.target.closest('#start-menu')) closeStartMenu();
+    if (!e.target.closest('#ctx-menu')) closeCtxMenu();
+});
+
+window.addEventListener('message', e => {
+    const d = e.data;
+    if (!d || !d.kernelAction) return;
+    if (d.kernelAction === 'LAUNCH_WITH_FILE') {
+        launchApp(d.targetApp);
+        setTimeout(() => {
+            const win = openWindows.get(d.targetApp);
+            const iframe = win?.querySelector('.app-iframe');
+            if (iframe?.contentWindow) iframe.contentWindow.postMessage({ type:'LOAD_FILE_CONTENT', content: d.content || '', filename: d.filename }, '*');
+        }, 300);
+    }
+});
+</script>
+</body>
 </html>

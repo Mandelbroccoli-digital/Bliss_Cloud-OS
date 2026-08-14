@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body, html { margin:0; padding:0; height:100%; background:#0a0c10; color:#c9d1d9; font-family:-apple-system,sans-serif; overflow:hidden; }
+        #app { display:flex; flex-direction:column; height:100%; }
+        .header { background:#161b22; border-bottom:1px solid #30363d; padding:14px 20px; display:flex; align-items:center; gap:10px; }
+        .header h1 { font-size:16px; color:#f0f6fc; }
+        .header .badge { background:#e44d32; color:#fff; font-size:10px; padding:2px 6px; border-radius:3px; font-weight:bold; }
+        #content { flex:1; overflow-y:auto; padding:16px; }
+        .card { background:#161b22; border:1px solid #30363d; border-radius:8px; padding:14px; margin-bottom:12px; }
+        .card h3 { font-size:13px; color:#f0f6fc; margin-bottom:8px; }
+        .pipeline { display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
+        .stage { padding:6px 12px; border-radius:4px; font-size:11px; font-weight:bold; }
+        .stage.nigredo { background:#1a1a1a; color:#666; border:1px solid #333; }
+        .stage.albedo { background:#e0e0e0; color:#333; }
+        .stage.citrinitas { background:#ffb703; color:#000; }
+        .stage.rubedo { background:#e44d32; color:#fff; }
+        .arrow { color:#8b949e; font-size:14px; }
+        .log { background:#05070a; border:1px solid #30363d; border-radius:6px; padding:10px; font-family:monospace; font-size:11px; color:#7ee787; max-height:200px; overflow-y:auto; }
+        .log .err { color:#f85149; }
+        .log .gold { color:#ffb703; }
+        .log .blue { color:#58a6ff; }
+        .btn { background:#3a82f2; border:none; color:#fff; padding:6px 14px; border-radius:4px; cursor:pointer; font-size:12px; margin-right:8px; }
+        .btn:hover { background:#5599ff; }
+        .btn.danger { background:#e44d32; }
+        .btn.danger:hover { background:#ff6650; }
+        .stat-row { display:flex; gap:16px; margin-bottom:8px; }
+        .stat { flex:1; text-align:center; }
+        .stat .v { font-size:20px; font-weight:bold; color:#3a82f2; }
+        .stat .l { font-size:10px; color:#8b949e; }
+    </style>
+</head>
+<body>
+<div id="app">
+    <div class="header">
+        <span style="font-size:22px;">⚡</span>
+        <h1>Subkernel Control</h1>
+        <span class="badge">ACTIVE</span>
+    </div>
+    <div id="content">
+        <div class="card">
+            <h3>SML Transmutation Pipeline</h3>
+            <div class="pipeline">
+                <span class="stage nigredo">NIGREDO</span>
+                <span class="arrow">→</span>
+                <span class="stage albedo">ALBEDO</span>
+                <span class="arrow">→</span>
+                <span class="stage citrinitas">CITRINITAS</span>
+                <span class="arrow">→</span>
+                <span class="stage rubedo">RUBEDO</span>
+            </div>
+            <p style="color:#8b949e;font-size:11px;margin-top:8px;">Current phase: <strong style="color:#ffb703;">Citrinitas</strong> — awaiting final transmutation trigger.</p>
+        </div>
+        <div class="card">
+            <h3>Runtime Metrics</h3>
+            <div class="stat-row">
+                <div class="stat"><div class="v" id="m-uptime">0s</div><div class="l">UPTIME</div></div>
+                <div class="stat"><div class="v" id="m-tasks">0</div><div class="l">TASKS</div></div>
+                <div class="stat"><div class="v" id="m-mem">—</div><div class="l">MEM (MB)</div></div>
+                <div class="stat"><div class="v">∞</div><div class="l">TIMEOUT</div></div>
+            </div>
+        </div>
+        <div class="card">
+            <h3>Kernel Log</h3>
+            <div class="log" id="kernel-log"></div>
+        </div>
+        <div class="card">
+            <h3>Controls</h3>
+            <button class="btn" onclick="transmute()">⚡ Trigger Transmutation</button>
+            <button class="btn" onclick="clearLog()">🗑️ Clear Log</button>
+            <button class="btn danger" onclick="if(confirm('Restart kernel?'))restartKernel()">🔄 Restart Kernel</button>
+        </div>
+    </div>
+</div>
+<script>
+    const logEl = document.getElementById('kernel-log');
+    let tasks = 0;
+
+    function log(text, cls) {
+        const d = document.createElement('div');
+        d.className = cls || '';
+        d.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+        logEl.appendChild(d);
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    log('Subkernel initialized. Mali 2.2B runtime loaded.', 'gold');
+    log('SML pipeline: Nigredo → Albedo → Citrinitas (current)', 'blue');
+    log('Subprocess timeout limits: DISABLED', 'gold');
+    log('Awaiting transmutation trigger...', '');
+
+    function transmute() {
+        tasks++;
+        log('Transmutation triggered. Entering Rubedo phase...', 'gold');
+        setTimeout(() => log('Scanning workspace context...', 'blue'), 300);
+        setTimeout(() => log('Processing SML markers...', ''), 600);
+        setTimeout(() => log('Transpiling ChorusDSL → WASM target...', ''), 900);
+        setTimeout(() => log('✓ Transmutation complete. Projection output ready.', 'gold'), 1200);
+        updateStats();
+    }
+
+    function clearLog() { logEl.innerHTML = ''; log('Log cleared.', ''); }
+    function restartKernel() {
+        logEl.innerHTML = ''; tasks = 0;
+        log('Kernel restarting...', 'err');
+        setTimeout(() => log('Subkernel re-initialized. Mali 2.2B runtime loaded.', 'gold'), 500);
+    }
+
+    function updateStats() {
+        document.getElementById('m-uptime').textContent = Math.floor(performance.now()/1000) + 's';
+        document.getElementById('m-tasks').textContent = tasks;
+        if (performance.memory) document.getElementById('m-mem').textContent = Math.round(performance.memory.usedJSHeapSize/1048576);
+    }
+    setInterval(updateStats, 1000);
+</script>
+</body>
+</html>

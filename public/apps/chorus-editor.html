@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chorus Editor</title>
+    <style>
+        :root { --gold:#ffb703; --rubedo:#e44d32; --blue:#3a82f2; --bg:#0d1117; --panel:#161b22; --border:#30363d; --text:#c9d1d9; --dim:#8b949e; }
+        * { box-sizing:border-box; margin:0; padding:0; }
+        body, html { width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--text); font-family:-apple-system,sans-serif; font-size:13px; }
+        #app { display:grid; grid-template-columns:200px 1fr 280px; grid-template-rows:40px 1fr 28px; grid-template-areas:"header header header" "sidebar editor inspector" "status status status"; width:100vw; height:100vh; }
+        header { grid-area:header; background:var(--panel); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 14px; }
+        .brand { display:flex; align-items:center; gap:8px; color:#f0f6fc; font-weight:600; }
+        .brand .badge { color:var(--gold); font-size:10px; border:1px solid var(--gold); padding:1px 6px; border-radius:3px; }
+        .toolbar { display:flex; gap:6px; }
+        .btn { background:var(--panel); border:1px solid var(--border); color:var(--text); padding:4px 10px; font-size:11px; border-radius:4px; cursor:pointer; }
+        .btn:hover { background:#21262d; }
+        .btn.primary { background:var(--blue); border-color:var(--blue); color:#fff; }
+        #sidebar { grid-area:sidebar; background:var(--panel); border-right:1px solid var(--border); overflow-y:auto; padding:8px; }
+        .sb-section { font-size:10px; text-transform:uppercase; letter-spacing:0.5px; color:var(--dim); margin-bottom:6px; font-weight:bold; }
+        .voice-item { padding:6px 8px; cursor:pointer; border-radius:4px; font-family:monospace; font-size:12px; display:flex; align-items:center; gap:6px; }
+        .voice-item:hover { background:rgba(255,255,255,0.06); }
+        .voice-item.active { background:rgba(58,130,242,0.2); color:var(--blue); }
+        .voice-marker { font-size:9px; padding:1px 4px; border-radius:2px; }
+        .marker-nigredo { background:#333; color:#aaa; }
+        .marker-albedo { background:#e0e0e0; color:#333; }
+        .marker-citrinitas { background:var(--gold); color:#000; }
+        .marker-rubedo { background:var(--rubedo); color:#fff; }
+        #editor-area { grid-area:editor; display:flex; flex-direction:column; overflow:hidden; }
+        #editor-tabs { display:flex; background:var(--panel); border-bottom:1px solid var(--border); height:32px; }
+        .tab { padding:6px 14px; font-size:12px; cursor:pointer; border-right:1px solid var(--border); display:flex; align-items:center; gap:6px; color:var(--dim); }
+        .tab.active { background:var(--bg); color:var(--text); }
+        #editor-wrap { flex:1; display:flex; overflow:hidden; }
+        #gutter { width:40px; background:var(--panel); border-right:1px solid var(--border); color:var(--dim); font-family:monospace; font-size:12px; line-height:21px; padding:8px 0; text-align:right; user-select:none; overflow:hidden; }
+        .gl { padding-right:8px; }
+        .gl.marker::before { content:"●"; position:absolute; left:4px; font-size:7px; color:var(--gold); }
+        .gl.rubedo::before { color:var(--rubedo); }
+        #code { flex:1; background:transparent; border:none; outline:none; color:#e6edf3; font-family:monospace; font-size:13px; line-height:21px; padding:8px; resize:none; white-space:pre; tab-size:4; }
+        #inspector { grid-area:inspector; background:var(--panel); border-left:1px solid var(--border); overflow-y:auto; padding:12px; }
+        .insp-title { font-size:11px; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:8px; font-weight:bold; }
+        .insp-card { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:10px; margin-bottom:10px; }
+        .insp-card h4 { font-size:12px; margin-bottom:6px; color:var(--text); }
+        .insp-card p { font-size:11px; color:var(--dim); line-height:1.5; }
+        .phase-bar { display:flex; gap:4px; margin-top:8px; }
+        .phase-dot { flex:1; height:6px; border-radius:3px; background:#333; }
+        .phase-dot.active { background:var(--gold); }
+        .phase-dot.rubedo.active { background:var(--rubedo); }
+        #status { grid-area:status; background:var(--panel); border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 12px; font-size:11px; color:var(--dim); }
+    </style>
+</head>
+<body>
+<div id="app">
+    <header>
+        <div class="brand"><span class="badge">CHORUS</span><span>ChorusDSL Editor</span></div>
+        <div class="toolbar">
+            <button class="btn" onclick="compileChorus()">⚡ Compile</button>
+            <button class="btn" onclick="saveChorus()">💾 Save</button>
+            <button class="btn primary" onclick="runChorus()">▶ Run</button>
+        </div>
+    </header>
+    <div id="sidebar">
+        <div class="sb-section">Voices</div>
+        <div id="voice-list"></div>
+        <div class="sb-section" style="margin-top:14px;">SML Phases</div>
+        <div class="voice-item" style="font-size:11px;"><span class="voice-marker marker-nigredo">N</span> Nigredo</div>
+        <div class="voice-item" style="font-size:11px;"><span class="voice-marker marker-albedo">A</span> Albedo</div>
+        <div class="voice-item" style="font-size:11px;"><span class="voice-marker marker-citrinitas">C</span> Citrinitas</div>
+        <div class="voice-item" style="font-size:11px;"><span class="voice-marker marker-rubedo">R</span> Rubedo</div>
+    </div>
+    <div id="editor-area">
+        <div id="editor-tabs">
+            <div class="tab active">📄 main.chorx</div>
+            <div class="tab">📄 utils.chorx</div>
+            <div class="tab" style="color:var(--dim)">+</div>
+        </div>
+        <div id="editor-wrap">
+            <div id="gutter"></div>
+            <textarea id="code" spellcheck="false">// ChorusDSL v2.0 — Hermetic Voice System
+// @tag:mali.context
+
+voice scan_directory(path) {
+    @sml:nigredo
+    emit FindFirstFile(path);
+}
+
+voice process_node(node_id) {
+    @sml:albedo
+    let data = scan_directory("/root");
+    emit TranspileTarget(node_id, data);
+}
+
+voice finalize_output(target) {
+    @sml:citrinitas
+    emit LinkOutput(target);
+}
+
+voice transmute_reality() {
+    @sml:rubedo
+    let all = process_node("root");
+    finalize_output(all);
+    emit ProjectionComplete();
+}</textarea>
+        </div>
+    </div>
+    <div id="inspector">
+        <div class="insp-title">Mali Inspector</div>
+        <div class="insp-card">
+            <h4>Voice Count</h4>
+            <p id="voice-count">4 voices detected</p>
+        </div>
+        <div class="insp-card">
+            <h4>SML Phase Progression</h4>
+            <p>Current phase: Citrinitas</p>
+            <div class="phase-bar">
+                <div class="phase-dot active"></div>
+                <div class="phase-dot active"></div>
+                <div class="phase-dot active"></div>
+                <div class="phase-dot rubedo"></div>
+            </div>
+        </div>
+        <div class="insp-card">
+            <h4>Compile Output</h4>
+            <p id="compile-log" style="font-family:monospace;font-size:10px;">Ready to compile.</p>
+        </div>
+        <div class="insp-card">
+            <h4>Transmutation Target</h4>
+            <p>C → WebAssembly<br>Runtime: Mali 2.2B Local<br>Timeout: Unlimited</p>
+        </div>
+    </div>
+    <div id="status">
+        <div style="display:flex;gap:12px;align-items:center;">
+            <span style="color:#3fb950;">●</span> Mali: Active
+            <span>ChorusDSL v2.0</span>
+        </div>
+        <div style="display:flex;gap:12px;">
+            <span id="chorus-cursor">Ln 1, Col 1</span>
+            <span>UTF-8</span>
+        </div>
+    </div>
+</div>
+<script>
+    const code = document.getElementById('code');
+    const gutter = document.getElementById('gutter');
+    const voiceList = document.getElementById('voice-list');
+    const compileLog = document.getElementById('compile-log');
+    const cursorEl = document.getElementById('chorus-cursor');
+
+    function updateGutter() {
+        const lines = code.value.split('\n');
+        gutter.innerHTML = lines.map((line, i) => {
+            let cls = 'gl';
+            if (line.includes('@sml:rubedo')) cls += ' marker rubedo';
+            else if (line.includes('@sml:')) cls += ' marker';
+            return `<div class="${cls}" style="position:relative;">${i+1}</div>`;
+        }).join('');
+        gutter.scrollTop = code.scrollTop;
+    }
+
+    function updateVoices() {
+        const voices = code.value.match(/voice\s+(\w+)\s*\([^)]*\)/g) || [];
+        voiceList.innerHTML = '';
+        voices.forEach(v => {
+            const name = v.match(/voice\s+(\w+)/)[1];
+            const div = document.createElement('div');
+            div.className = 'voice-item';
+            let marker = 'marker-nigredo';
+            const lineAfter = code.value.indexOf(v);
+            const nextLines = code.value.substr(lineAfter, 200);
+            if (nextLines.includes('@sml:rubedo')) marker = 'marker-rubedo';
+            else if (nextLines.includes('@sml:citrinitas')) marker = 'marker-citrinitas';
+            else if (nextLines.includes('@sml:albedo')) marker = 'marker-albedo';
+            div.innerHTML = `<span class="voice-marker ${marker}">●</span> ${name}`;
+            voiceList.appendChild(div);
+        });
+        document.getElementById('voice-count').textContent = `${voices.length} voices detected`;
+    }
+
+    function compileChorus() {
+        compileLog.textContent = 'Compiling...';
+        setTimeout(() => {
+            const voices = (code.value.match(/voice\s+/g) || []).length;
+            const markers = (code.value.match(/@sml:/g) || []).length;
+            compileLog.textContent = `✓ Compiled ${voices} voices, ${markers} SML markers.\nTarget: WASM\nStatus: Ready`;
+        }, 500);
+    }
+
+    function runChorus() {
+        compileChorus();
+        setTimeout(() => { compileLog.textContent += '\n▶ Running transmutation...\n✓ Projection complete.'; }, 800);
+    }
+
+    function saveChorus() {
+        compileLog.textContent = 'Saved to virtual FS.';
+    }
+
+    code.addEventListener('input', () => { updateGutter(); updateVoices(); });
+    code.addEventListener('scroll', () => { gutter.scrollTop = code.scrollTop; });
+    code.addEventListener('keyup', () => {
+        const lines = code.value.substr(0, code.selectionStart).split('\n');
+        cursorEl.textContent = `Ln ${lines.length}, Col ${lines[lines.length-1].length+1}`;
+    });
+
+    updateGutter(); updateVoices();
+</script>
+</body>
+</html>

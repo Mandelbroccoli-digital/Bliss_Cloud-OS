@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body, html { margin:0; padding:0; height:100%; display:flex; flex-direction:column; font-family:sans-serif; }
+        .bar { background:#ece9d8; border-bottom:1px solid #999; padding:3px 6px; font-size:12px; display:flex; gap:10px; }
+        textarea { flex:1; border:none; outline:none; padding:8px; font-family:monospace; font-size:13px; resize:none; }
+    </style>
+</head>
+<body>
+    <div class="bar"><span>File</span><span>Edit</span><span>Format</span><span>View</span></div>
+    <textarea id="editor" placeholder="Type text here..."></textarea>
+    <script>
+        window.addEventListener('message', (e) => {
+            if(e.data.type === 'LOAD_FILE_CONTENT') {
+                document.getElementById('editor').value = e.data.content || `// Loaded: ${e.data.filename || 'unknown'}\n\nFile content would appear here.`;
+            }
+        });
+    </script>
+</body>
+</html>
