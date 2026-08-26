@@ -8,6 +8,14 @@
     <meta name="theme-color" content="#1a4a8a">
     <title>Bliss OS v0.0.9 // CloudOS Subkernel</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <!-- Engine layer — mirrors the Tauri champion (ui/index.html). The desktop
+         shell lives in this file; these scripts boot the nervous system before
+         the inline shell script runs. main.tsx is an intentional no-op. -->
+    <script src="/subkernel-bus.js"></script>
+    <script src="/subkernel-bridge.js"></script>
+    <script src="/logos-tools.js"></script>
+    <script src="/logos-engine.js"></script>
+    <script src="/mcp-client.js"></script>
     <style>
         :root {
             --xp-taskbar: linear-gradient(to bottom, #245edb 0%, #3971ed 10%, #1741b8 100%);
