@@ -1,75 +1,626 @@
+successfully downloaded text file (SHA: de9d7671d86de386ae312729fd2271214e6ed7f4)
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <script src="../subkernel-bus.js"></script>
+    <script src="../subkernel-bridge.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frame Viewer // Subkernel</title>
     <style>
-        body, html { margin:0; padding:0; height:100%; display:flex; flex-direction:column; background:#1a1a2e; color:#fff; font-family:sans-serif; }
-        .gallery-header { background:#16213e; padding:12px 16px; border-bottom:1px solid #30475e; display:flex; justify-content:space-between; align-items:center; }
-        .gallery-header h2 { font-size:16px; }
-        .upload-btn { background:#3a82f2; border:none; color:#fff; padding:6px 14px; border-radius:4px; cursor:pointer; font-size:12px; }
-        .upload-btn:hover { background:#5599ff; }
-        #grid { flex:1; overflow-y:auto; padding:12px; display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:12px; align-content:start; }
-        .photo-card { background:#16213e; border-radius:8px; overflow:hidden; cursor:pointer; transition:transform 0.15s; }
-        .photo-card:hover { transform:scale(1.03); }
-        .photo-card img { width:100%; height:120px; object-fit:cover; display:block; }
-        .photo-card .meta { padding:6px 8px; font-size:11px; color:#8b949e; }
-        #lightbox { position:fixed; inset:0; background:rgba(0,0,0,0.9); display:none; align-items:center; justify-content:center; z-index:9999; flex-direction:column; gap:12px; }
-        #lightbox img { max-width:90%; max-height:80vh; border-radius:8px; }
-        #lightbox .close { position:absolute; top:16px; right:16px; color:#fff; font-size:28px; cursor:pointer; background:rgba(255,255,255,0.1); width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
-        .empty { text-align:center; color:#8b949e; padding:40px; grid-column:1/-1; }
-        .empty .icon { font-size:48px; margin-bottom:12px; }
+        :root {
+            --bg: #ece9d8;
+            --card: #f1efe2;
+            --surface: #fff;
+            --text: #000;
+            --accent-color: #0055ea;
+            --border: #7f9db9;
+            --muted: #555;
+            --hdr-a: #0058e6;
+            --hdr-b: #3a93ff;
+            --sidebar-bg: #f1efe2;
+            --sidebar-border: #7f9db9;
+            --thumb-hover: rgba(0,85,234,.12);
+            --thumb-active: rgba(0,85,234,.22);
+            --placeholder-bg: #e3e0d0;
+            --scrollbar: #a0a0a0;
+            --scrollbar-track: #e3e0d0;
+        }
+        [data-theme="dark"] {
+            --bg: #1e222a;
+            --card: #262b34;
+            --surface: #12151a;
+            --text: #d7dce4;
+            --border: #3a3f4b;
+            --muted: #93a0b4;
+            --hdr-a: #1b2a44;
+            --hdr-b: #2c4a7a;
+            --sidebar-bg: #262b34;
+            --sidebar-border: #3a3f4b;
+            --thumb-hover: rgba(100,149,237,.15);
+            --thumb-active: rgba(100,149,237,.25);
+            --placeholder-bg: #1a1e26;
+            --scrollbar: #4a5060;
+            --scrollbar-track: #1a1e26;
+        }
+        [data-theme="slate"] {
+            --bg: #2b303b;
+            --card: #353c4a;
+            --surface: #1e222a;
+            --text: #e2e8f0;
+            --border: #4a5060;
+            --muted: #94a3b8;
+            --hdr-a: #334155;
+            --hdr-b: #475569;
+            --sidebar-bg: #353c4a;
+            --sidebar-border: #4a5060;
+            --thumb-hover: rgba(148,163,184,.15);
+            --thumb-active: rgba(148,163,184,.25);
+            --placeholder-bg: #262b34;
+            --scrollbar: #5a6070;
+            --scrollbar-track: #262b34;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: "Tahoma", "Segoe UI", sans-serif;
+            font-size: 11px;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            user-select: none;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .hdr {
+            background: linear-gradient(90deg, var(--hdr-a), var(--hdr-b));
+            color: #fff;
+            padding: 6px 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        .hdr .title { display: flex; align-items: center; gap: 8px; }
+        .hdr .pill {
+            background: rgba(0,0,0,.3);
+            padding: 1px 7px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-weight: normal;
+            font-size: 10px;
+        }
+
+        /* Main layout */
+        .body { flex: 1; display: flex; min-height: 0; }
+
+        /* Sidebar */
+        .sidebar {
+            width: 200px;
+            background: var(--sidebar-bg);
+            border-right: 1px solid var(--sidebar-border);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+        .sidebar-hdr {
+            padding: 6px 10px;
+            border-bottom: 1px solid var(--sidebar-border);
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .sidebar-hdr .hint { font-weight: normal; font-size: 10px; color: var(--muted); }
+        .file-list {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+        .file-list::-webkit-scrollbar { width: 6px; }
+        .file-list::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+        .file-list::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 3px; }
+        .file-item {
+            padding: 4px 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border-left: 3px solid transparent;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .file-item:hover { background: var(--thumb-hover); }
+        .file-item.on {
+            background: var(--thumb-active);
+            border-left-color: var(--accent-color);
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+        .file-item .icon { font-size: 14px; flex-shrink: 0; }
+        .file-item .name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .empty-msg {
+            padding: 20px 10px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 10px;
+        }
+
+        /* Toolbar */
+        .toolbar {
+            padding: 4px 8px;
+            border-top: 1px solid var(--sidebar-border);
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            background: linear-gradient(180deg, #fff, #e3e0d0);
+            border: 1px solid #7f9db9;
+            padding: 2px 8px;
+            cursor: pointer;
+            border-radius: 2px;
+            font-size: 11px;
+            font-family: inherit;
+            color: #000;
+        }
+        .btn:hover { background: linear-gradient(180deg, #eaf2ff, #b5d3ff); border-color: #3c7fb1; }
+        .btn:active { box-shadow: inset 1px 1px 3px rgba(0,0,0,.3); }
+        .btn.mini { padding: 1px 6px; font-size: 9px; }
+
+        /* Main viewport */
+        .viewport {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            overflow: hidden;
+            position: relative;
+        }
+        .media-area {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--placeholder-bg);
+            overflow: hidden;
+            position: relative;
+        }
+        .placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: var(--muted);
+            text-align: center;
+            padding: 20px;
+        }
+        .placeholder .big-icon { font-size: 32px; opacity: 0.5; }
+
+        /* Media elements */
+        #view-img, #view-video {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            transition: transform 0.1s ease;
+        }
+        #view-img.hidden, #view-video.hidden, .placeholder.hidden { display: none !important; }
+
+        /* Zoom overlay controls */
+        .zoom-controls {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            display: flex;
+            gap: 2px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            padding: 2px;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        .zoom-controls:hover { opacity: 1; }
+
+        /* Status bar */
+        .status {
+            padding: 3px 10px;
+            border-top: 1px solid var(--border);
+            background: var(--card);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 10px;
+            color: var(--muted);
+        }
+        .status .specs {
+            font-family: monospace;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Keyboard hint */
+        .kbd-hint {
+            position: absolute;
+            bottom: 32px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            color: #fff;
+            padding: 4px 12px;
+            border-radius: 3px;
+            font-size: 10px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        .kbd-hint.show { opacity: 1; }
     </style>
 </head>
-<body>
-    <div class="gallery-header">
-        <h2>🖼️ Gallery</h2>
-        <label class="upload-btn">📁 Upload<input type="file" accept="image/*" multiple style="display:none;" onchange="loadImages(this.files)"></label>
-    </div>
-    <div id="grid">
-        <div class="empty">
-            <div class="icon">🖼️</div>
-            <div>No photos yet. Upload images to get started.</div>
+<body data-theme="xp">
+
+    <div class="hdr">
+        <div class="title">
+            <span>🖼️ FRAME VIEWER</span>
+            <span class="pill" id="media-title">No Media Loaded</span>
+        </div>
+        <div style="display:flex; gap:6px;">
+            <span class="pill" id="p-count">FILES: 0</span>
+            <span class="pill" id="p-idx">— / —</span>
         </div>
     </div>
-    <div id="lightbox">
-        <div class="close" onclick="closeLightbox()">&#x2715;</div>
-        <img id="lightbox-img" src="">
-        <div style="color:#8b949e;font-size:12px;" id="lightbox-meta"></div>
-    </div>
-    <script>
-        const photos = [];
 
-        function loadImages(files) {
-            for (const f of files) {
-                photos.push({ name: f.name, url: URL.createObjectURL(f), size: (f.size/1024).toFixed(0) + ' KB' });
-            }
-            renderGrid();
+    <div class="body">
+        <!-- Sidebar: File browser -->
+        <div class="sidebar">
+            <div class="sidebar-hdr">
+                <span id="dir-label" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:130px;">📁 …</span>
+                <span class="hint" id="dir-hint">scanning…</span>
+            </div>
+            <div class="file-list" id="file-list">
+                <div class="empty-msg">Scanning directory…</div>
+            </div>
+            <div class="toolbar">
+                <button class="btn mini" onclick="scanDir()" title="Rescan">🔄</button>
+                <button class="btn mini" onclick="prevFile()" title="Previous">◀</button>
+                <button class="btn mini" onclick="nextFile()" title="Next">▶</button>
+                <button class="btn mini" onclick="openDirPicker()" title="Open folder">📂</button>
+                <button class="btn mini" onclick="revealInExplorer()" title="Reveal in Explorer">🗂️</button>
+            </div>
+        </div>
+
+        <!-- Main viewport -->
+        <div class="viewport">
+            <div class="media-area" id="media-area">
+                <div class="placeholder" id="placeholder">
+                    <div class="big-icon">🎞️</div>
+                    <span>Select a file from the sidebar or drop media here</span>
+                    <span style="font-size:10px; opacity:0.6">Arrow keys to navigate · Scroll to zoom · Drag to pan</span>
+                </div>
+                <img id="view-img" class="hidden" src="" alt="Frame output" />
+                <video id="view-video" class="hidden" controls autoplay loop muted></video>
+                <div class="kbd-hint" id="kbd-hint"></div>
+            </div>
+            <div class="zoom-controls">
+                <button class="btn mini" onclick="zoom(-0.25)">−</button>
+                <button class="btn mini" onclick="zoom(0.25)">+</button>
+                <button class="btn mini" onclick="resetZoom()">⟲</button>
+            </div>
+            <div class="status">
+                <span id="status-left">Ready</span>
+                <span class="specs" id="media-specs">IDLE</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const bus = window.subkernel;
+        const K   = window.SubkernelBridge;
+
+        const MEDIA_TYPES = {
+            IMAGE: ['png','jpg','jpeg','ico','webp','gif','svg','bmp','avif'],
+            VIDEO: ['mp4','webm','ogg','ogv','mov','mkv','avi','m4v']
+        };
+        const ALL_EXTS = [...MEDIA_TYPES.IMAGE, ...MEDIA_TYPES.VIDEO];
+
+        const $ = (id) => document.getElementById(id);
+        const mediaTitle = $('media-title'), mediaSpecs = $('media-specs'),
+              statusLeft = $('status-left'), placeholder = $('placeholder'),
+              viewImg = $('view-img'), viewVideo = $('view-video'),
+              fileList = $('file-list'), dirHint = $('dir-hint'),
+              pCount = $('p-count'), pIdx = $('p-idx'), kbdHint = $('kbd-hint'),
+              dirLabel = $('dir-label');
+
+        let files = [], currentIndex = -1, currentZoom = 1;
+        let currentDir = null;
+        let isPanning = false, panStart = {x:0,y:0}, panOffset = {x:0,y:0};
+        const objectUrls = [];
+
+        // ── Theme ────────────────────────────────────────────────────
+        const applyTheme = (t) => document.body.setAttribute('data-theme', t || 'xp');
+
+        // ── Asset URL resolution (the reason frames were blank) ──────
+        // Tauri v2 exposes convertFileSrc on __TAURI__.core. Without it the
+        // raw C:\ path is used as an <img src>, which the webview refuses.
+        function convertAssetUrl(filePath) {
+            if (/^(blob:|data:|https?:|asset:)/i.test(filePath)) return filePath;
+            const t = window.__TAURI__;
+            const fn = t?.core?.convertFileSrc || t?.convertFileSrc;
+            if (fn) { try { return fn(filePath); } catch (e) {} }
+            return filePath;
         }
 
-        function renderGrid() {
-            const grid = document.getElementById('grid');
-            if (photos.length === 0) {
-                grid.innerHTML = '<div class="empty"><div class="icon">🖼️</div><div>No photos yet. Upload images to get started.</div></div>';
+        const getExt  = (n) => (n.split('.').pop() || '').toLowerCase();
+        const isMedia = (n) => ALL_EXTS.includes(getExt(n));
+        const getIcon = (n) => MEDIA_TYPES.IMAGE.includes(getExt(n)) ? '🖼️'
+                             : MEDIA_TYPES.VIDEO.includes(getExt(n)) ? '🎬' : '📄';
+
+        function revokeUrls() { while (objectUrls.length) URL.revokeObjectURL(objectUrls.pop()); }
+
+        // ── Directory scan: uses the real kernel command ─────────────
+        async function scanDir(dirPath) {
+            if (!K || !K.hasKernel) {
+                dirHint.textContent = 'kernel offline';
+                showPlaceholder('Native kernel not attached — cannot scan directories.');
                 return;
             }
-            grid.innerHTML = '';
-            photos.forEach((p, i) => {
-                const card = document.createElement('div');
-                card.className = 'photo-card';
-                card.innerHTML = `<img src="${p.url}"><div class="meta">${p.name} · ${p.size}</div>`;
-                card.onclick = () => openLightbox(i);
-                grid.appendChild(card);
+            if (!dirPath) {
+                try { dirPath = await K.invoke('home_directory'); } catch (e) { dirPath = '.'; }
+                try {
+                    const probe = await K.invoke('read_directory', { path: dirPath });
+                    const pics = probe.find(e => e.is_dir && /^pictures$/i.test(e.name));
+                    if (pics) dirPath = pics.path;
+                } catch (e) {}
+            }
+
+            dirHint.textContent = 'scanning…';
+            revokeUrls();
+            files = [];
+            currentIndex = -1;
+
+            try {
+                // read_directory is the actual registered command.
+                const entries = await K.invoke('read_directory', { path: dirPath });
+                files = entries
+                    .filter(e => !e.is_dir && isMedia(e.name))
+                    .map(e => ({ name: e.name, path: e.path, size: e.size || 0 }));
+                currentDir = dirPath;
+            } catch (e) {
+                dirHint.textContent = 'unavailable';
+                showPlaceholder(String(e));
+                renderFileList();
+                return;
+            }
+
+            dirLabel.textContent = '📁 ' + currentDir;
+            dirLabel.title = currentDir;
+            dirHint.textContent = `${files.length} media`;
+            pCount.textContent = `FILES: ${files.length}`;
+            renderFileList();
+
+            if (files.length) loadFile(0);
+            else showPlaceholder('No media files in ' + currentDir);
+
+            bus && bus.emit('Gallery', 'scanned', { path: currentDir, count: files.length });
+        }
+
+        function renderFileList() {
+            if (!files.length) {
+                fileList.innerHTML = '<div class="empty-msg">No media files here.<br><br>Drop files, or click 📂 to pick a folder.</div>';
+                return;
+            }
+            fileList.innerHTML = '';
+            files.forEach((f, i) => {
+                const d = document.createElement('div');
+                d.className = 'file-item' + (i === currentIndex ? ' on' : '');
+                d.onclick = () => loadFile(i);
+                const ic = document.createElement('span');
+                ic.className = 'icon'; ic.textContent = getIcon(f.name);
+                const nm = document.createElement('span');
+                nm.className = 'name'; nm.textContent = f.name; nm.title = f.name;
+                d.append(ic, nm);
+                fileList.appendChild(d);
             });
+            const active = fileList.querySelector('.file-item.on');
+            if (active) active.scrollIntoView({ block: 'nearest' });
         }
 
-        function openLightbox(i) {
-            const lb = document.getElementById('lightbox');
-            document.getElementById('lightbox-img').src = photos[i].url;
-            document.getElementById('lightbox-meta').textContent = `${photos[i].name} · ${photos[i].size}`;
-            lb.style.display = 'flex';
+        // ── Render a frame ───────────────────────────────────────────
+        function showMedia(src, name, ext, sizeLabel) {
+            placeholder.classList.add('hidden');
+            viewImg.classList.add('hidden');
+            viewVideo.classList.add('hidden');
+            try { viewVideo.pause(); } catch (e) {}
+            resetZoom();
+
+            mediaTitle.textContent = name;
+
+            if (MEDIA_TYPES.IMAGE.includes(ext)) {
+                viewImg.onerror = () => showPlaceholder('Could not decode ' + name);
+                viewImg.onload  = () => { mediaSpecs.textContent =
+                    `IMG // ${viewImg.naturalWidth}×${viewImg.naturalHeight} // .${ext.toUpperCase()}${sizeLabel ? ' // ' + sizeLabel : ''}`; };
+                viewImg.src = src;
+                viewImg.classList.remove('hidden');
+                mediaSpecs.textContent = `IMG // .${ext.toUpperCase()}`;
+            } else if (MEDIA_TYPES.VIDEO.includes(ext)) {
+                viewVideo.onerror = () => showPlaceholder('Could not play ' + name);
+                viewVideo.onloadedmetadata = () => { mediaSpecs.textContent =
+                    `VIDEO // ${viewVideo.videoWidth}×${viewVideo.videoHeight} // .${ext.toUpperCase()}`; };
+                viewVideo.src = src;
+                viewVideo.classList.remove('hidden');
+                mediaSpecs.textContent = `VIDEO // .${ext.toUpperCase()}`;
+            } else {
+                showPlaceholder('Unsupported format: .' + ext);
+            }
         }
 
-        function closeLightbox() { document.getElementById('lightbox').style.display = 'none'; }
-        document.getElementById('lightbox').addEventListener('click', e => { if (e.target.id === 'lightbox') closeLightbox(); });
+        function loadFile(index) {
+            if (index < 0 || index >= files.length) return;
+            currentIndex = index;
+            const f = files[index];
+            pIdx.textContent = `${index + 1} / ${files.length}`;
+            statusLeft.textContent = f.path;
+            statusLeft.title = f.path;
+            showMedia(convertAssetUrl(f.path), f.name, getExt(f.name), formatSize(f.size));
+            renderFileList();
+            bus && bus.emit('Gallery', 'viewing', { path: f.path, name: f.name });
+        }
+
+        // Load a single path that did not come from the current listing.
+        async function loadMedia(filePath) {
+            if (!filePath) return;
+            const name = filePath.split(/[\\/]/).pop();
+            const idx = files.findIndex(f => f.path === filePath);
+            if (idx !== -1) return loadFile(idx);
+
+            // Pull in the sibling directory so navigation still works.
+            if (K && K.hasKernel && !/^(blob:|data:)/i.test(filePath)) {
+                try {
+                    const parent = await K.invoke('parent_directory', { path: filePath });
+                    if (parent && parent !== currentDir) {
+                        await scanDir(parent);
+                        const j = files.findIndex(f => f.path === filePath);
+                        if (j !== -1) return loadFile(j);
+                    }
+                } catch (e) {}
+            }
+            statusLeft.textContent = filePath;
+            showMedia(convertAssetUrl(filePath), name, getExt(name), '');
+        }
+
+        function showPlaceholder(msg) {
+            placeholder.classList.remove('hidden');
+            viewImg.classList.add('hidden');
+            viewVideo.classList.add('hidden');
+            try { viewVideo.pause(); } catch (e) {}
+            viewImg.removeAttribute('src');
+            viewVideo.removeAttribute('src');
+            placeholder.querySelector('span').textContent = msg || 'Select a file from the sidebar';
+            mediaSpecs.textContent = 'IDLE';
+            pIdx.textContent = '— / —';
+        }
+
+        function formatSize(b) {
+            if (!b) return '';
+            if (b < 1024) return b + ' B';
+            if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+            return (b/1048576).toFixed(1) + ' MB';
+        }
+
+        const prevFile = () => files.length && loadFile((currentIndex - 1 + files.length) % files.length);
+        const nextFile = () => files.length && loadFile((currentIndex + 1) % files.length);
+
+        // ── Zoom / pan ───────────────────────────────────────────────
+        function zoom(d) {
+            currentZoom = Math.max(0.25, Math.min(8, currentZoom + d));
+            applyTransform();
+            showHint(`Zoom: ${Math.round(currentZoom * 100)}%`);
+        }
+        function resetZoom() { currentZoom = 1; panOffset = {x:0,y:0}; applyTransform(); }
+        function applyTransform() {
+            const el = !viewImg.classList.contains('hidden') ? viewImg
+                     : !viewVideo.classList.contains('hidden') ? viewVideo : null;
+            if (el) el.style.transform = `translate(${panOffset.x}px, ${panOffset.y}px) scale(${currentZoom})`;
+        }
+        function showHint(t) {
+            kbdHint.textContent = t;
+            kbdHint.classList.add('show');
+            clearTimeout(kbdHint._t);
+            kbdHint._t = setTimeout(() => kbdHint.classList.remove('show'), 1200);
+        }
+
+        // ── Send elsewhere in the subkernel ──────────────────────────
+        function revealInExplorer() {
+            if (!currentDir) return;
+            K.openApp('explorer');
+            bus.emit('Explorer', 'open-path', { path: currentDir });
+        }
+
+        // ── Drag & drop ──────────────────────────────────────────────
+        window.addEventListener('dragover', (e) => e.preventDefault());
+        window.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const f = e.dataTransfer.files[0];
+            if (!f) return;
+            const url = URL.createObjectURL(f);
+            objectUrls.push(url);
+            if (!files.some(x => x.name === f.name)) {
+                files.push({ name: f.name, path: url, size: f.size });
+                pCount.textContent = `FILES: ${files.length}`;
+            }
+            loadFile(files.findIndex(x => x.name === f.name));
+        });
+
+        // ── Keyboard ─────────────────────────────────────────────────
+        document.addEventListener('keydown', (e) => {
+            if (['INPUT','TEXTAREA'].includes(e.target.tagName)) return;
+            const map = {
+                ArrowLeft: prevFile, ArrowRight: nextFile,
+                '+': () => zoom(.25), '=': () => zoom(.25),
+                '-': () => zoom(-.25), '_': () => zoom(-.25),
+                '0': resetZoom,
+                Home: () => files.length && loadFile(0),
+                End:  () => files.length && loadFile(files.length - 1),
+                F5:   () => scanDir(currentDir)
+            };
+            if (map[e.key]) { e.preventDefault(); map[e.key](); }
+        });
+
+        $('media-area').addEventListener('wheel', (e) => {
+            e.preventDefault();
+            zoom(e.deltaY > 0 ? -0.12 : 0.12);
+        }, { passive: false });
+
+        const mediaArea = $('media-area');
+        mediaArea.addEventListener('mousedown', (e) => {
+            if (e.target === viewImg || e.target === viewVideo) {
+                isPanning = true;
+                panStart = { x: e.clientX - panOffset.x, y: e.clientY - panOffset.y };
+                e.preventDefault();
+            }
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (!isPanning) return;
+            panOffset = { x: e.clientX - panStart.x, y: e.clientY - panStart.y };
+            applyTransform();
+        });
+        window.addEventListener('mouseup', () => { isPanning = false; });
+
+        async function openDirPicker() {
+            const start = currentDir || bus.getState('explorerPath', '');
+            const path = prompt('Open folder:', start);
+            if (path) scanDir(path);
+        }
+
+        // ── Bus wiring (correct two-argument API) ────────────────────
+        if (bus) {
+            applyTheme(bus.getState('theme', 'xp'));
+            bus.on('System',  'theme-change', ({ theme }) => applyTheme(theme));
+            // The shell routes an opened file here by app id.
+            bus.on('gallery', 'open-file',  ({ path }) => path && loadMedia(path));
+            bus.on('Gallery', 'open-file',  ({ path }) => path && loadMedia(path));
+            bus.on('Gallery', 'open-path',  ({ path }) => path && scanDir(path));
+            bus.on('Gallery', 'refresh',    () => scanDir(currentDir));
+            bus.on('Gallery', 'query',      () => bus.emit('Gallery', 'query:reply',
+                { dir: currentDir, count: files.length, current: files[currentIndex]?.path || null }));
+            // Follow Explorer when it moves, so the two surfaces stay coherent.
+            bus.on('Explorer', 'fs-changed', () => currentDir && scanDir(currentDir));
+        }
+
+        // ── Boot ─────────────────────────────────────────────────────
+        scanDir(null);
     </script>
 </body>
 </html>

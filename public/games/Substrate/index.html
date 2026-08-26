@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Substrate — Open World</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #06090f; font-family: system-ui, sans-serif; }
+        canvas { display: block; width: 100% !important; height: 100% !important; }
+        /* Boot progress bar the engine reports into (#bootbar) */
+        #boot {
+            position: fixed; inset: 0; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            background: radial-gradient(ellipse at 50% 40%, #101a2b 0%, #06090f 70%);
+            color: #cfe0f0; z-index: 50; transition: opacity .6s; pointer-events: none;
+        }
+        #boot h1 { font-size: 34px; letter-spacing: .35em; font-weight: 300; margin: 0 0 10px; }
+        #boot .sub { opacity: .55; font-size: 13px; margin-bottom: 26px; }
+        #boot .bar { width: 240px; height: 3px; background: #1c2940; border-radius: 2px; overflow: hidden; }
+        #bootbar { height: 100%; width: 0%; background: linear-gradient(90deg, #3a82f2, #62b262); transition: width .2s; }
+        /* HUD hint */
+        #hud { position: fixed; top: 8px; left: 8px; color: #9fb3c8; font-size: 11px;
+            font-family: monospace; text-shadow: 0 1px 2px #000; z-index: 20; pointer-events: none; opacity: .8; }
+    </style>
+    <!-- Perchance→Ollama interceptor (from Devlog.txt plan): any AI-text call the
+         engine makes to a perchance endpoint is rerouted to the local model runner
+         over Tauri IPC (or direct localhost if IPC is absent). Engine stays offline. -->
+    <script>
+    (function () {
+        const ORIGINAL_FETCH = window.fetch;
+        const PERCHANCE_API_PATTERNS = [
+            /perchance\.org\/api/i,
+            /user-assets\.perchance\.org/i,
+            /api\.perchance\.org/i
+        ];
+        const LOCAL_MODEL_ENDPOINT = "http://127.0.0.1:11434/api/generate";
+
+        window.fetch = async function (...args) {
+            let [resource, config] = args;
+            const url = typeof resource === "string" ? resource : resource.url;
+            const isPerchanceCall = PERCHANCE_API_PATTERNS.some((p) => p.test(url));
+            if (!isPerchanceCall) return ORIGINAL_FETCH.apply(this, args);
+
+            try {
+                let originalPayload = {};
+                if (config && config.body) {
+                    originalPayload = typeof config.body === "string" ? JSON.parse(config.body) : config.body;
+                }
+                const promptText = originalPayload.prompt || originalPayload.instruction || JSON.stringify(originalPayload);
+
+                const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+                if (invoke) {
+                    // Route through Rust kernel → Ollama.
+                    const res = await invoke("query_ollama", {
+                        model: "gemma3-1b-export:latest",
+                        prompt: promptText
+                    });
+                    const text = (typeof res === "string") ? res : (res.response || "");
+                    return new Response(JSON.stringify({ output: text, text: text, status: "success" }),
+                        { status: 200, headers: { "Content-Type": "application/json" } });
+                }
+                // Fallback: direct localhost Ollama.
+                const localRes = await ORIGINAL_FETCH(LOCAL_MODEL_ENDPOINT, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ model: "gemma3-1b-export:latest", prompt: promptText, stream: false })
+                });
+                const data = await localRes.json();
+                const gen = data.response || "";
+                return new Response(JSON.stringify({ output: gen, text: gen, status: "success" }),
+                    { status: 200, headers: { "Content-Type": "application/json" } });
+            } catch (err) {
+                console.error("[Substrate Interceptor] routing failed, falling back:", err);
+                return ORIGINAL_FETCH.apply(this, args);
+            }
+        };
+    })();
+    </script>
+</head>
+<body>
+    <div id="boot">
+        <h1>SUBSTRATE</h1>
+        <div class="sub">open-world physics sandbox</div>
+        <div class="bar"><div id="bootbar"></div></div>
+    </div>
+    <div id="hud">WASD move · Space jump · F blast · F5 save · J adventures · click to lock pointer</div>
+
+    <!-- World Director: the agentic bridge. Loaded as a classic script so it
+         can poll window.__game / window.__debug (set by the module) and relay
+         kernel commands back into the sim. See world_director.js. -->
+    <script src="./world_director.js"></script>
+
+    <!-- The engine mounts its canvas into <body>; main.js grabs #bootbar above. -->
+    <script type="module">
+        import "./main.js";
+        // Hide the boot overlay once the world is up (main.js drives #bootbar to 100%).
+        const obs = setInterval(() => {
+            const bar = document.getElementById("bootbar");
+            if (bar && bar.style.width && parseInt(bar.style.width) >= 100) {
+                const boot = document.getElementById("boot");
+                if (boot) { boot.style.opacity = "0"; setTimeout(() => boot.remove(), 700); }
+                clearInterval(obs);
+            }
+        }, 400);
+        // Safety: never let the boot screen trap the user.
+        setTimeout(() => { const b = document.getElementById("boot"); if (b) { b.style.opacity = "0"; setTimeout(() => b.remove(), 700); } }, 20000);
+    </script>
+</body>
+</html>

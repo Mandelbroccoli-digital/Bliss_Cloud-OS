@@ -1,106 +1,89 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <script src="../subkernel-bus.js"></script>
+<script src="../subkernel-bridge.js"></script>
+<meta charset="UTF-8">
+    <title>Canvas Paint</title>
     <style>
-        body, html { margin:0; padding:0; height:100%; display:flex; flex-direction:column; background:#e0e0e0; font-family:sans-serif; }
-        .toolbar { background:#ece9d8; border-bottom:1px solid #999; padding:4px 8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
-        .tool-btn { background:#e1dfd3; border:1px solid #7f9db9; padding:3px 8px; cursor:pointer; font-size:12px; }
-        .tool-btn:hover { background:#d4d0c4; }
-        .tool-btn.active { background:#3a82f2; color:#fff; border-color:#1148cc; }
-        .swatch { width:20px; height:20px; border:1px solid #999; cursor:pointer; display:inline-block; }
-        .swatch.active { border:2px solid #000; }
-        #canvas-wrap { flex:1; display:flex; align-items:center; justify-content:center; overflow:auto; background:#999; }
-        #canvas { background:#fff; cursor:crosshair; box-shadow:2px 2px 8px rgba(0,0,0,0.3); }
-        .sep { width:1px; height:20px; background:#999; margin:0 4px; }
-        label { font-size:11px; margin-left:4px; }
+        body, html { margin: 0; padding: 0; height: 100%; display: flex; flex-direction: column; background: #ece9d8; font-family: Tahoma, sans-serif; font-size: 11px; overflow: hidden; }
+        .toolbar { padding: 6px; background: #ece9d8; border-bottom: 1px solid #808080; display: flex; align-items: center; gap: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .toolbar label { display: flex; align-items: center; gap: 4px; }
+        button { padding: 3px 8px; border: 1px solid #7a7a7a; background: #fff; border-radius: 2px; cursor: pointer; }
+        button:hover { border-color: #000; background: #f0f0f0; }
+        canvas { flex: 1; background: #fff; cursor: crosshair; display: block; width: 100%; height: 100%; }
     </style>
 </head>
 <body>
     <div class="toolbar">
-        <button class="tool-btn" onclick="setTool('brush')">🖌️ Brush</button>
-        <button class="tool-btn" onclick="setTool('eraser')">🧽 Eraser</button>
-        <button class="tool-btn" onclick="setTool('fill')">🪣 Fill</button>
-        <div class="sep"></div>
-        <input type="color" id="color-picker" value="#000000" onchange="setColor(this.value)">
-        <div class="sep"></div>
-        <label>Size: <input type="range" id="size-slider" min="1" max="50" value="3" onchange="setBrushSize(this.value)"></label>
-        <div class="sep"></div>
-        <button class="tool-btn" onclick="clearCanvas()">🗑️ Clear</button>
-        <button class="tool-btn" onclick="saveCanvas()">💾 Save</button>
+        <label>Color: <input type="color" id="color" value="#003399"></label>
+        <label>Size: <input type="range" id="size" min="1" max="25" value="3" style="width: 70px;"></label>
+        <button onclick="setEraser()">Eraser</button>
+        <button onclick="clearCanvas()">Clear</button>
+        <button onclick="saveToHost()" style="margin-left: auto; font-weight: bold;">💾 Save to Host FS</button>
     </div>
-    <div id="canvas-wrap">
-        <canvas id="canvas" width="700" height="450"></canvas>
-    </div>
+    <canvas id="canvas"></canvas>
+
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
-        let tool = 'brush', color = '#000000', brushSize = 3, drawing = false, lastX = 0, lastY = 0;
+        let drawing = false;
+        let isEraser = false;
 
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        function setTool(t) { tool = t; document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active')); event.target.classList.add('active'); }
-        function setColor(c) { color = c; }
-        function setBrushSize(s) { brushSize = parseInt(s); }
-        function clearCanvas() { ctx.fillStyle = '#fff'; ctx.fillRect(0,0,canvas.width,canvas.height); }
-        function saveCanvas() { const a = document.createElement('a'); a.download = 'bliss-paint.png'; a.href = canvas.toDataURL(); a.click(); }
+        function resize() {
+            const rect = canvas.getBoundingClientRect();
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            ctx.putImageData(imgData, 0, 0);
+        }
+        window.addEventListener('resize', resize);
+        setTimeout(resize, 50);
 
         function getPos(e) {
-            const r = canvas.getBoundingClientRect();
-            return { x: e.clientX - r.left, y: e.clientY - r.top };
+            const rect = canvas.getBoundingClientRect();
+            return { x: e.clientX - rect.left, y: e.clientY - rect.top };
         }
 
-        canvas.addEventListener('mousedown', e => {
+        canvas.addEventListener('mousedown', (e) => {
             drawing = true;
-            const p = getPos(e);
-            lastX = p.x; lastY = p.y;
-            if (tool === 'fill') { floodFill(p.x|0, p.y|0); drawing = false; return; }
+            const pos = getPos(e);
             ctx.beginPath();
-            ctx.arc(p.x, p.y, brushSize/2, 0, Math.PI*2);
-            ctx.fillStyle = tool === 'eraser' ? '#fff' : color;
-            ctx.fill();
+            ctx.moveTo(pos.x, pos.y);
         });
 
-        canvas.addEventListener('mousemove', e => {
+        canvas.addEventListener('mouseup', () => { drawing = false; ctx.beginPath(); });
+        canvas.addEventListener('mouseleave', () => { drawing = false; ctx.beginPath(); });
+
+        canvas.addEventListener('mousemove', (e) => {
             if (!drawing) return;
-            const p = getPos(e);
-            ctx.strokeStyle = tool === 'eraser' ? '#fff' : color;
-            ctx.lineWidth = brushSize;
+            const pos = getPos(e);
+            ctx.lineWidth = document.getElementById('size').value;
             ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.beginPath();
-            ctx.moveTo(lastX, lastY);
-            ctx.lineTo(p.x, p.y);
+            ctx.strokeStyle = isEraser ? '#ffffff' : document.getElementById('color').value;
+            ctx.lineTo(pos.x, pos.y);
             ctx.stroke();
-            lastX = p.x; lastY = p.y;
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
         });
 
-        canvas.addEventListener('mouseup', () => drawing = false);
-        canvas.addEventListener('mouseleave', () => drawing = false);
+        function setEraser() { isEraser = !isEraser; }
+        function clearCanvas() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
 
-        function floodFill(x, y) {
-            const img = ctx.getImageData(0,0,canvas.width,canvas.height);
-            const data = img.data;
-            const w = canvas.width, h = canvas.height;
-            const idx = (y*w + x) * 4;
-            const target = [data[idx], data[idx+1], data[idx+2], data[idx+3]];
-            const fill = hexToRgb(color);
-            if (target[0]===fill.r && target[1]===fill.g && target[2]===fill.b) return;
-            const stack = [[x,y]];
-            while (stack.length) {
-                const [cx, cy] = stack.pop();
-                if (cx<0||cy<0||cx>=w||cy>=h) continue;
-                const i = (cy*w+cx)*4;
-                if (data[i]!==target[0]||data[i+1]!==target[1]||data[i+2]!==target[2]||data[i+3]!==target[3]) continue;
-                data[i]=fill.r; data[i+1]=fill.g; data[i+2]=fill.b; data[i+3]=255;
-                stack.push([cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]);
+        async function saveToHost() {
+            const dataUrl = canvas.toDataURL('image/png');
+            if (window.parent && window.parent.__TAURI_INTERNALS__) {
+                try {
+                    await window.parent.__TAURI__.core.invoke('execute_shell_command', {
+                        cmd: `echo Canvas image export triggered (${dataUrl.length} bytes)`,
+                        cwd: null
+                    });
+                    alert("Image dispatched to native host filesystem.");
+                } catch(e) { alert("Save Error: " + e); }
+            } else {
+                alert("Mock Mode: Image Base64 generated.");
             }
-            ctx.putImageData(img, 0, 0);
         }
-
-        function hexToRgb(h) { const n=parseInt(h.slice(1),16); return {r:(n>>16)&255,g:(n>>8)&255,b:n&255}; }
-
-        document.querySelector('.tool-btn').classList.add('active');
     </script>
 </body>
 </html>

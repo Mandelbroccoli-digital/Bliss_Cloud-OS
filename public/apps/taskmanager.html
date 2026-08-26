@@ -1,0 +1,341 @@
+successfully downloaded text file (SHA: 10a23a31b0c023a959e378d6197f363d6fbfb2a6)
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script src="../subkernel-bus.js"></script>
+<script src="../subkernel-bridge.js"></script>
+<meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subkernel Task Manager</title>
+    <style>
+        :root {
+            --bg-primary: #ece9d8; --bg-card: #f1efe2; --bg-surface: #ffffff;
+            --accent-color: #0055ea; --text-main: #000; --border-color: #004eae;
+            --win-header-from: #0058e6; --win-header-to: #3a93ff;
+        }
+        [data-theme="dark"] {
+            --bg-primary: #1e222a; --bg-card: #262b34; --bg-surface: #12151a;
+            --text-main: #d7dce4; --border-color: #10141a;
+            --win-header-from: #1b2a44; --win-header-to: #2c4a7a;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: "Tahoma","Segoe UI",sans-serif; font-size: 11px;
+            background: var(--bg-primary); color: var(--text-main);
+            height: 100vh; display: flex; flex-direction: column; padding: 6px; gap: 6px;
+            user-select: none; overflow: hidden;
+        }
+        .box { background: var(--bg-card); border: 2px solid var(--border-color); box-shadow: 2px 2px 6px rgba(0,0,0,.2); display:flex; flex-direction:column; min-height:0; }
+        .hdr { background: linear-gradient(90deg,var(--win-header-from),var(--win-header-to)); color:#fff; padding:5px 8px; display:flex; justify-content:space-between; align-items:center; font-weight:bold; }
+        .pill { background: rgba(0,0,0,.28); padding:1px 7px; border-radius:3px; font-family:monospace; font-weight:normal; }
+        .tabs { display:flex; gap:2px; padding:4px 4px 0; background: rgba(0,0,0,.06); border-bottom:1px solid #aca899; }
+        .tab { padding:4px 12px; cursor:pointer; border:1px solid transparent; border-bottom:none; border-radius:3px 3px 0 0; font-weight:bold; }
+        .tab.on { background: var(--bg-card); border-color:#aca899; color: var(--accent-color); }
+        .tab:not(.on):hover { background: rgba(0,0,0,.06); }
+        .scroll { flex:1; overflow:auto; background: var(--bg-surface); border:2px inset #716f64; min-height:0; }
+        table { width:100%; border-collapse: collapse; font-family: monospace; font-size:11px; }
+        thead th { position:sticky; top:0; background: var(--bg-card); border-bottom:1px solid #aca899; padding:4px 6px; text-align:left; cursor:pointer; z-index:2; }
+        thead th:hover { color: var(--accent-color); }
+        tbody td { padding:3px 6px; border-bottom:1px solid rgba(128,128,128,.18); white-space:nowrap; }
+        tbody tr { cursor:pointer; }
+        tbody tr:hover { background: rgba(49,106,197,.12); }
+        tbody tr.sel { background: rgba(49,106,197,.30); font-weight:bold; }
+        .badge { padding:1px 5px; border-radius:3px; font-size:9px; font-weight:bold; }
+        .b-sys  { background:#ede0ff; color:#5b21b6; }
+        .b-app  { background:#dbeafe; color:#1e40af; }
+        .b-host { background:#e5e7eb; color:#374151; }
+        .b-run  { background:#d1fae5; color:#065f46; }
+        .b-min  { background:#fef3c7; color:#92400e; }
+        .btn { background: linear-gradient(180deg,#fff,#e3e0d0); border:1px solid #7f9db9; padding:3px 9px; cursor:pointer; border-radius:2px; font-size:11px; font-family:inherit; color:#000; }
+        .btn:hover { background: linear-gradient(180deg,#eaf2ff,#b5d3ff); border-color:#3c7fb1; }
+        .btn:active { box-shadow: inset 1px 1px 3px rgba(0,0,0,.3); }
+        .btn.danger { color:#9b1c1c; border-color:#c05252; background: linear-gradient(180deg,#fff5f5,#ffdada); }
+        .btn.mini { padding:1px 6px; font-size:9px; }
+        .bar { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:5px 6px; border-top:1px solid #aca899; flex-wrap:wrap; }
+        .stats { display:flex; gap:12px; font-family:monospace; }
+        .stats b { color: var(--accent-color); }
+        .log { height:88px; overflow:auto; background:#0b0e12; color:#3f7; font-family:monospace; font-size:10px; padding:5px; border:2px inset #716f64; }
+        .log .warn { color:#fbbf24; } .log .err { color:#f87171; } .log .bus { color:#7dd3fc; }
+        .meter { height:8px; background: rgba(0,0,0,.15); border-radius:4px; overflow:hidden; width:110px; display:inline-block; vertical-align:middle; }
+        .meter > i { display:block; height:100%; background: linear-gradient(90deg,#34d399,#059669); }
+        input.search { border:1px solid #7f9db9; padding:2px 5px; font-size:11px; width:130px; }
+    </style>
+</head>
+<body>
+
+<div class="box" style="flex:1;">
+    <div class="hdr">
+        <span>🖥️ SUBKERNEL TASK MANAGER</span>
+        <span style="display:flex; gap:6px; font-size:10px;">
+            <span class="pill" id="p-kernel">KERNEL: —</span>
+            <span class="pill" id="p-mem">MEM: —</span>
+            <span class="pill" id="p-bus">BUS: 0/s</span>
+        </span>
+    </div>
+
+    <div class="tabs">
+        <div class="tab on" data-tab="windows" onclick="setTab('windows')">Subkernel Windows</div>
+        <div class="tab"    data-tab="host"    onclick="setTab('host')">Host Processes</div>
+        <div class="tab"    data-tab="bus"     onclick="setTab('bus')">Bus Traffic</div>
+        <div style="flex:1"></div>
+        <input class="search" id="search" placeholder="filter…" oninput="render()" style="margin:0 4px 4px 0;">
+        <button class="btn mini" onclick="refresh()" style="margin:0 4px 4px 0;">🔄 Refresh</button>
+    </div>
+
+    <div class="scroll"><table id="grid"><thead></thead><tbody></tbody></table></div>
+
+    <div class="bar">
+        <div class="stats">
+            <span>Windows: <b id="s-win">0</b></span>
+            <span>Host PIDs: <b id="s-proc">0</b></span>
+            <span>RAM: <b id="s-ram">—</b></span>
+            <span id="s-meter"></span>
+        </div>
+        <div style="display:flex; gap:5px;">
+            <button class="btn" onclick="runNew()">▶ Run…</button>
+            <button class="btn" onclick="focusSel()">🔍 Switch To</button>
+            <button class="btn" onclick="tileAll()">▦ Tile</button>
+            <button class="btn danger" onclick="endSel()">✖ End Task</button>
+        </div>
+    </div>
+</div>
+
+<div class="box" style="flex:0 0 auto;">
+    <div class="hdr" style="padding:3px 8px; font-size:10px;">
+        <span>DISPATCH LOG</span><span class="pill" id="p-clock">—</span>
+    </div>
+    <div class="log" id="log"></div>
+</div>
+
+<script>
+const bus = window.subkernel;
+const K   = window.SubkernelBridge;
+
+let tab       = 'windows';
+let windows   = [];
+let hostProcs = [];
+let busLog    = [];
+let selected  = null;
+let busCount  = 0, busRate = 0;
+let sortKey = null, sortAsc = true;
+
+const $ = (id) => document.getElementById(id);
+
+// ── log ──────────────────────────────────────────────────────────────
+function log(msg, cls = '') {
+    const el = $('log');
+    const d = document.createElement('div');
+    if (cls) d.className = cls;
+    d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    el.appendChild(d);
+    while (el.children.length > 300) el.firstChild.remove();
+    el.scrollTop = el.scrollHeight;
+}
+
+// ── data sources ─────────────────────────────────────────────────────
+bus.on('Shell', 'windows', ({ windows: w }) => {
+    const changed = JSON.stringify(w) !== JSON.stringify(windows);
+    windows = w || [];
+    $('s-win').textContent = windows.length;
+    if (tab === 'windows' && changed) render();
+});
+
+bus.onAny((frame) => {
+    if (!frame || frame.app === 'Shell' && frame.action === 'windows') return;
+    busCount++;
+    busLog.unshift({
+        ts: frame.ts, app: frame.app, action: frame.action,
+        origin: frame.origin, payload: JSON.stringify(frame.payload || {}).slice(0, 160)
+    });
+    if (busLog.length > 200) busLog.pop();
+    if (tab === 'bus') render();
+});
+
+async function pollHost() {
+    if (!K.hasKernel) return;
+    try {
+        hostProcs = await K.invoke('list_processes');
+        $('s-proc').textContent = hostProcs.length;
+        if (tab === 'host') render();
+    } catch (e) { log(`host poll failed: ${e}`, 'err'); }
+}
+
+async function pollStats() {
+    $('p-kernel').textContent = `KERNEL: ${K.hasKernel ? 'ATTACHED' : 'OFFLINE'}`;
+    if (!K.hasKernel) return;
+    try {
+        const s = await K.invoke('system_stats');
+        const usedKb = s.total_mem_kb - s.free_mem_kb;
+        const pct = s.total_mem_kb ? Math.round(usedKb / s.total_mem_kb * 100) : 0;
+        const gb = (kb) => (kb / 1048576).toFixed(1);
+        $('p-mem').textContent = `MEM: ${pct}%`;
+        $('s-ram').textContent = `${gb(usedKb)} / ${gb(s.total_mem_kb)} GB`;
+        $('s-meter').innerHTML = `<span class="meter"><i style="width:${pct}%"></i></span>`;
+        $('s-proc').textContent = s.proc_count;
+    } catch (e) {}
+}
+
+// ── rendering ────────────────────────────────────────────────────────
+function setTab(t) {
+    tab = t;
+    selected = null;
+    sortKey = null;
+    document.querySelectorAll('.tab').forEach(el => el.classList.toggle('on', el.dataset.tab === t));
+    if (t === 'host') pollHost();
+    render();
+}
+
+const COLS = {
+    windows: [
+        ['id','App'], ['title','Title'], ['kind','Kind'],
+        ['state','State'], ['file','Bound File'], ['ctl','Control']
+    ],
+    host: [['pid','PID'], ['name','Image Name'], ['mem_kb','Memory'], ['session','Session'], ['ctl','Control']],
+    bus:  [['ts','Time'], ['app','Target'], ['action','Action'], ['origin','Origin'], ['payload','Payload']],
+};
+
+function rows() {
+    const q = $('search').value.trim().toLowerCase();
+    let data = tab === 'windows' ? windows : tab === 'host' ? hostProcs : busLog;
+    if (q) data = data.filter(r => JSON.stringify(r).toLowerCase().includes(q));
+    if (sortKey) {
+        data = [...data].sort((a, b) => {
+            const x = a[sortKey], y = b[sortKey];
+            return (x < y ? -1 : x > y ? 1 : 0) * (sortAsc ? 1 : -1);
+        });
+    }
+    return data;
+}
+
+function sortOn(key) {
+    if (key === 'ctl') return;
+    sortAsc = sortKey === key ? !sortAsc : true;
+    sortKey = key;
+    render();
+}
+
+const kb = (v) => v >= 1048576 ? `${(v/1048576).toFixed(2)} GB` : v >= 1024 ? `${(v/1024).toFixed(1)} MB` : `${v} KB`;
+
+function render() {
+    const thead = $('grid').querySelector('thead');
+    const tbody = $('grid').querySelector('tbody');
+    thead.innerHTML = '<tr>' + COLS[tab].map(([k, l]) =>
+        `<th onclick="sortOn('${k}')">${l}${sortKey === k ? (sortAsc ? ' ▲' : ' ▼') : ''}</th>`).join('') + '</tr>';
+    tbody.innerHTML = '';
+
+    const data = rows();
+    if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="6" style="padding:18px; text-align:center; opacity:.6">
+            ${tab === 'host' && !K.hasKernel ? 'Host process table requires the native kernel.' : 'Nothing to show.'}</td></tr>`;
+        return;
+    }
+
+    data.forEach((r, i) => {
+        const tr = document.createElement('tr');
+        let cells;
+        if (tab === 'windows') {
+            const state = !r.visible ? '<span class="badge b-min">MINIMIZED</span>'
+                        : r.focused ? '<span class="badge b-run">FOREGROUND</span>'
+                        : '<span class="badge b-run">RUNNING</span>';
+            cells = [
+                r.id,
+                r.title,
+                `<span class="badge ${r.kind === 'system' ? 'b-sys' : 'b-app'}">${(r.kind||'app').toUpperCase()}</span>`,
+                state,
+                r.file ? String(r.file).split(/[\\/]/).pop() : '—',
+                `<button class="btn mini" onclick="event.stopPropagation();focusApp('${r.id}')">Show</button>
+                 <button class="btn mini danger" onclick="event.stopPropagation();endWindow('${r.id}')">End</button>`
+            ];
+            tr.onclick = () => { selected = { type: 'window', id: r.id }; render(); };
+            if (selected?.type === 'window' && selected.id === r.id) tr.className = 'sel';
+        } else if (tab === 'host') {
+            cells = [
+                r.pid,
+                r.name,
+                kb(r.mem_kb),
+                `<span class="badge b-host">${r.session || '—'}</span>`,
+                `<button class="btn mini danger" onclick="event.stopPropagation();killPid(${r.pid},'${r.name.replace(/'/g,"")}')">Kill</button>`
+            ];
+            tr.onclick = () => { selected = { type: 'host', pid: r.pid, name: r.name }; render(); };
+            if (selected?.type === 'host' && selected.pid === r.pid) tr.className = 'sel';
+        } else {
+            cells = [
+                new Date(r.ts).toLocaleTimeString(),
+                r.app, r.action, r.origin, r.payload
+            ];
+        }
+        cells.forEach((c, ci) => {
+            const td = document.createElement('td');
+            if (typeof c === 'string' && c.includes('<')) td.innerHTML = c;
+            else td.textContent = c;
+            tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+    });
+}
+
+// ── actions (all real) ───────────────────────────────────────────────
+function focusApp(id) { bus.emit('Shell', 'focus-app', { app: id }); log(`focus → ${id}`); }
+function endWindow(id) { bus.emit('Shell', 'close-app', { app: id }); log(`close → ${id}`, 'warn'); }
+
+async function killPid(pid, name) {
+    if (!confirm(`Terminate host process ${pid} (${name})?\n\nUnsaved work in that process is lost.`)) return;
+    try {
+        const msg = await K.invoke('kill_process', { pid });
+        log(msg, 'warn');
+        pollHost();
+    } catch (e) { log(`kill ${pid} failed: ${e}`, 'err'); }
+}
+
+function endSel() {
+    if (!selected) return log('Select a row first.', 'warn');
+    if (selected.type === 'window') endWindow(selected.id);
+    else killPid(selected.pid, selected.name);
+}
+
+function focusSel() {
+    if (selected?.type === 'window') focusApp(selected.id);
+    else log('Switch To applies to subkernel windows.', 'warn');
+}
+
+function tileAll() { bus.emit('Shell', 'tile-all', {}); log('tiled all windows'); }
+
+function runNew() {
+    const known = Object.keys(K.APPS).join(', ');
+    const v = prompt(`Run: enter an app key or a shell command prefixed with >\n\nApps: ${known}`, 'terminal');
+    if (!v) return;
+    if (v.startsWith('>')) {
+        const cmd = v.slice(1).trim();
+        log(`exec: ${cmd}`);
+        K.invoke('execute_shell_command', { cmd })
+            .then(out => { log(`ok: ${String(out).trim().slice(0,300) || '(no output)'}`); pollHost(); })
+            .catch(e => log(`exec failed: ${e}`, 'err'));
+    } else if (K.APPS[v]) {
+        K.openApp(v);
+        log(`launched ${v}`);
+    } else {
+        log(`unknown app "${v}"`, 'err');
+    }
+}
+
+function refresh() {
+    bus.emit('Shell', 'windows-request', {});
+    pollHost();
+    pollStats();
+    log('refreshed process tree');
+}
+
+// ── boot ─────────────────────────────────────────────────────────────
+bus.emit('Shell', 'windows-request', {});
+pollHost(); pollStats(); render();
+setInterval(pollHost, 4000);
+setInterval(pollStats, 3000);
+setInterval(() => {
+    busRate = busCount; busCount = 0;
+    $('p-bus').textContent = `BUS: ${busRate}/s`;
+    $('p-clock').textContent = new Date().toLocaleTimeString();
+}, 1000);
+log('Task Manager bound to subkernel bus.');
+</script>
+</body>
+</html>

@@ -1,127 +1,221 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <script src="../subkernel-bus.js"></script>
+<script src="../subkernel-bridge.js"></script>
+<meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terminal Shell</title>
     <style>
-        body, html { margin:0; padding:0; height:100%; background:#0c0c0c; color:#0f0; font-family:monospace; font-size:13px; overflow:hidden; display:flex; flex-direction:column; }
-        #output { flex:1; overflow-y:auto; padding:10px; white-space:pre-wrap; word-break:break-all; }
-        .line { margin-bottom:2px; }
-        .err { color:#f85149; }
-        .info { color:#58a6ff; }
-        .gold { color:#ffb703; }
-        #input-bar { display:flex; align-items:center; background:#161b22; border-top:1px solid #30363d; padding:6px 10px; }
-        .prompt { color:#3a82f2; margin-right:8px; font-weight:bold; }
-        #input { flex:1; background:transparent; border:none; outline:none; color:#f0f6fc; font-family:monospace; font-size:13px; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            background-color: #0c0c0c;
+            color: #00ff66;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 13px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+        }
+
+        #output {
+            flex: 1;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            padding-bottom: 8px;
+            line-height: 1.4;
+        }
+
+        .input-line {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .prompt {
+            color: #0088ff;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        #cmd-input {
+            background: transparent;
+            border: none;
+            color: #fff;
+            font-family: inherit;
+            font-size: inherit;
+            outline: none;
+            flex: 1;
+            caret-color: #00ff66;
+        }
+
+        #output::-webkit-scrollbar {
+            width: 6px;
+        }
+        #output::-webkit-scrollbar-thumb {
+            background: #1f3d2b;
+            border-radius: 3px;
+        }
+        #output::-webkit-scrollbar-track {
+            background: #0c0c0c;
+        }
     </style>
 </head>
 <body>
-    <div id="output"></div>
-    <div id="input-bar">
-        <span class="prompt">bliss@os:~$</span>
-        <input type="text" id="input" autofocus placeholder="Type 'help' to begin...">
+
+    <div id="output">Bliss_26 Native Subkernel Shell v0.1&#10;Type 'help' or execute host commands directly.&#10;</div>
+    
+    <div class="input-line">
+        <span class="prompt" id="shell-prompt">subkernel@bliss:~$</span>
+        <input type="text" id="cmd-input" autofocus autocomplete="off" spellcheck="false" />
     </div>
+
     <script>
-        const out = document.getElementById('output');
-        const inp = document.getElementById('input');
-        const fs = { '/home/bliss': ['documents','projects','readme.txt'], '/': ['bin','etc','home','var','tmp'] };
-        let cwd = '/home/bliss';
-        let history = [];
-        let hIdx = 0;
+        const input = document.getElementById('cmd-input');
+        const output = document.getElementById('output');
+        const promptElem = document.getElementById('shell-prompt');
 
-        function print(text, cls) {
-            const d = document.createElement('div');
-            d.className = 'line ' + (cls||'');
-            d.textContent = text;
-            out.appendChild(d);
-            out.scrollTop = out.scrollHeight;
+        let currentCwd = null;
+
+        document.body.addEventListener('click', () => input.focus());
+
+        function appendOutput(text) {
+            output.innerText += text + '\n';
+            output.scrollTop = output.scrollHeight;
         }
 
-        function printHTML(html) {
-            const d = document.createElement('div');
-            d.className = 'line';
-            d.innerHTML = html;
-            out.appendChild(d);
-            out.scrollTop = out.scrollHeight;
+        function updatePromptDisplay() {
+            const displayPath = currentCwd ? currentCwd : '~';
+            promptElem.innerText = `subkernel@bliss:${displayPath}$`;
         }
 
-        const commands = {
-            help: () => {
-                print('Available commands:', 'info');
-                print('  help        Show this help');
-                print('  ls          List directory contents');
-                print('  pwd         Print working directory');
-                print('  cd <dir>    Change directory');
-                print('  echo <txt>  Print text');
-                print('  clear       Clear terminal');
-                print('  neofetch    System info');
-                print('  date        Current date/time');
-                print('  whoami      Current user');
-                print('  mali        Mali kernel status');
-                print('  cat <file>  Read file');
+        const localCommands = {
+            'help': () => `BlissOS Subkernel Shell Utilities:
+  sysinfo  - Print kernel, host bridge, and architecture status
+  clear    - Flush terminal scrollback buffer
+  chorus   - Status of ChorusDSL self-hosting runtime
+  help     - Display this summary`,
+
+            'sysinfo': () => {
+                const hostBridge = (window.parent && window.parent.isTauri) 
+                    ? 'Tauri v2 Native Host (Rust Core)' 
+                    : 'Standard Web Browser (Simulation Mode)';
+                return `[Subkernel Telemetry]
+  Engine Host  : ${hostBridge}
+  Architecture : march32 execution on x64 host
+  Active Runtime: HIVE / ChorusDSL Self-Hosting Environment`;
             },
-            ls: () => {
-                const items = fs[cwd] || fs['/'] || [];
-                items.forEach(i => print(i.startsWith('.') || i.includes('.') ? `📄 ${i}` : `📁 ${i}`));
-            },
-            pwd: () => print(cwd),
-            cd: (args) => {
-                if (!args[0]) { cwd = '/home/bliss'; return; }
-                if (args[0] === '..') { cwd = cwd.split('/').slice(0,-1).join('/') || '/'; return; }
-                const target = cwd === '/' ? '/' + args[0] : cwd + '/' + args[0];
-                if (fs[target]) cwd = target; else print(`cd: ${args[0]}: No such directory`, 'err');
-            },
-            echo: (args) => print(args.join(' ')),
-            clear: () => out.innerHTML = '',
-            neofetch: () => {
-                printHTML('<span class="gold">       🌀 BLISS OS v0.0.9</span>');
-                print('  Kernel:    CloudOS Subkernel');
-                print('  Shell:     bliss-sh 1.0');
-                print('  Runtime:   Mali 2.2B Local');
-                print('  SML Phase:  Citrinitas');
-                print('  Uptime:    ' + Math.floor(performance.now()/1000) + 's');
-                print('  Memory:    ' + (performance.memory ? Math.round(performance.memory.usedJSHeapSize/1048576) + ' MB' : 'N/A'));
-            },
-            date: () => print(new Date().toString()),
-            whoami: () => print('bliss'),
-            mali: () => {
-                print('[Mali 2.2B] Kernel status: ACTIVE', 'gold');
-                print('[Mali 2.2B] SML markers: aligned');
-                print('[Mali 2.2B] Subprocess limits: disabled');
-                print('[Mali 2.2B] Transmutation pipeline: ready', 'gold');
-            },
-            cat: (args) => {
-                if (!args[0]) { print('cat: missing file', 'err'); return; }
-                if (args[0] === 'readme.txt') print('Welcome to Bliss OS!\nThis is a cloud-native operating system.\nVersion 0.0.9 — Subkernel build.');
-                else print(`cat: ${args[0]}: No such file`, 'err');
+
+            'chorus': () => `ChorusDSL Runtime Status:
+  Self-Hosting Pipeline: ACTIVE
+  Editor Integration   : Direct Substrate Access
+  Target Arch          : march32 (x64 host execution)`,
+
+            'clear': () => {
+                output.innerText = '';
+                return null;
             }
         };
 
-        function exec(cmd) {
-            print(`bliss@os:~$ ${cmd}`);
-            const parts = cmd.trim().split(/\s+/);
-            const c = parts[0].toLowerCase();
-            const args = parts.slice(1);
-            if (commands[c]) commands[c](args);
-            else if (c) print(`bliss-sh: ${c}: command not found`, 'err');
-        }
-
-        inp.addEventListener('keydown', e => {
-            if (e.key === 'Enter') {
-                const cmd = inp.value;
-                if (cmd.trim()) { history.push(cmd); hIdx = history.length; }
-                exec(cmd);
-                inp.value = '';
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                if (hIdx > 0) { hIdx--; inp.value = history[hIdx] || ''; }
-            } else if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                if (hIdx < history.length) { hIdx++; inp.value = history[hIdx] || ''; }
+        window.addEventListener('message', (e) => {
+            const data = e.data;
+            if (data && data.type === 'TERMINAL_RESP') {
+                appendOutput(data.payload);
             }
         });
 
-        print('Bliss OS Terminal [Version 0.0.9]', 'info');
-        print('CloudOS Subkernel — Mali 2.2B Local Runtime', 'gold');
-        print('Type \'help\' for available commands.\n');
-    </script>
+        input.addEventListener('keydown', async (e) => {
+            if (e.key === 'Enter') {
+                const rawCmd = input.value;
+                const cmd = rawCmd.trim();
+                input.value = '';
+
+                if (!cmd) return;
+
+                appendOutput(`${promptElem.innerText} ${cmd}`);
+
+                // 1. Local utility commands
+                if (localCommands[cmd]) {
+                    const result = localCommands[cmd]();
+                    if (result !== null) appendOutput(result);
+                    return;
+                }
+
+                // 2. Client-side CD tracking
+                if (cmd === 'cd' || cmd.startsWith('cd ')) {
+                    const target = cmd.slice(2).trim();
+                    if (!target || target === '~') {
+                        currentCwd = null;
+                    } else if (target === '..') {
+                        if (currentCwd) {
+                            const parts = currentCwd.replace(/\\/g, '/').split('/').filter(Boolean);
+                            parts.pop();
+                            currentCwd = parts.length > 0 ? parts.join('/') : '..';
+                        } else {
+                            currentCwd = '..';
+                        }
+                    } else {
+                        currentCwd = currentCwd ? `${currentCwd}/${target}` : target;
+                    }
+                    updatePromptDisplay();
+                    return;
+                }
+
+                // 3. Route to Tauri Native host
+                if (window.parent && window.parent.__TAURI__ && window.parent.__TAURI__.core) {
+                    try {
+                        const res = await window.parent.__TAURI__.core.invoke('execute_shell_command', { 
+                            cmd: cmd, 
+                            cwd: currentCwd 
+                        });
+                        appendOutput(res);
+                    } catch (err) {
+                        appendOutput(`[TAURI_EXEC_ERR]: ${err}`);
+                    }
+                } 
+                // 4. Fallback IPC trigger to Parent Desktop Bridge
+                else if (window.parent && window.parent.postMessage) {
+                    window.parent.postMessage({
+                        kernelAction: 'FS_REQUEST',
+                        windowId: 'terminal',
+                        args: [cmd]
+                    }, '*');
+                } 
+                // 5. Default web fallback
+                else {
+                    appendOutput(`[MOCK OS MODE]: Executed '${cmd}'`);
+                }
+            }
+        });
+    
+    // ── subkernel bus wiring ──────────────────────────────────────
+    (function(){
+      const bus = window.subkernel;
+      if (!bus) return;
+      bus.on('Terminal', 'cd', ({ path }) => {
+        if (!path) return;
+        currentCwd = path;
+        if (typeof updatePromptDisplay === 'function') updatePromptDisplay();
+        appendOutput(`cd ${path}`);
+      });
+      bus.on('Terminal', 'exec', ({ command }) => {
+        if (!command) return;
+        input.value = command;
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      });
+      bus.on('terminal', 'open-file', ({ path }) => {
+        if (path) { currentCwd = path; if (typeof updatePromptDisplay === 'function') updatePromptDisplay(); }
+      });
+    })();
+</script>
 </body>
 </html>

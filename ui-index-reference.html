@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workspace Desktop - CloudOS Subkernel</title>
+    <script src="subkernel-bus.js"></script>
+    <script src="subkernel-bridge.js"></script>    
+    <style>
+        :root {
+            --xp-blue: #245edb;
+            --xp-taskbar: linear-gradient(to bottom, #245edb 0%, #3971ed 10%, #1741b8 100%);
+            --xp-start: linear-gradient(to bottom, #388238 0%, #62b262 10%, #296029 100%);
+            --win-bg: #ece9d8;
+            --win-border: #004eae;
+            --xp-gray: #f1efe2;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Tahoma", "Segoe UI", sans-serif; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background-color: #003399; user-select: none; }
+
+        #desktop {
+            width: 100%; height: calc(100% - 30px);
+            background: url('https://imgur.com/Yoh0zRC') no-repeat center center;
+            background-size: cover; position: relative; padding: 15px;
+            display: grid; grid-template-columns: repeat(auto-fill, 90px);
+            grid-template-rows: repeat(auto-fill, 90px); grid-auto-flow: column; gap: 12px;
+            overflow: hidden;
+            transition: background 0.3s ease;
+        }
+
+        .shortcut {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            text-align: center; cursor: pointer; color: white; font-size: 11px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.9); border: 1px solid transparent;
+            border-radius: 3px; padding: 6px 3px; transition: all 0.15s ease;
+        }
+        .shortcut:hover { background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.25); transform: scale(1.05); }
+        .shortcut:active { transform: scale(0.95); }
+        .shortcut span.icon { font-size: 32px; margin-bottom: 6px; filter: drop-shadow(1px 2px 2px rgba(0,0,0,0.5)); display: block; }
+
+        .window {
+            position: absolute; width: 600px; height: 450px; background: var(--xp-gray);
+            border: 3px solid var(--win-border); border-top-left-radius: 8px; border-top-right-radius: 8px;
+            box-shadow: 4px 4px 12px rgba(0,0,0,0.35); display: flex; flex-direction: column; z-index: 10;
+            min-width: 350px; min-height: 250px; animation: windowOpen 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            opacity: 1; transition: box-shadow 0.2s ease;
+        }
+        .window:focus-within { box-shadow: 5px 5px 16px rgba(0,0,0,0.45); }
+        .window.maximized { width: 100% !important; height: calc(100% - 30px) !important; top: 0 !important; left: 0 !important; }
+        .window.dock-left { width: 50% !important; height: calc(100% - 30px) !important; top: 0 !important; left: 0 !important; }
+        .window.dock-right { width: 50% !important; height: calc(100% - 30px) !important; top: 0 !important; left: 50% !important; }
+        .window.closing { animation: windowClose 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+
+        @keyframes windowOpen {
+            0% { opacity: 0; transform: scale(0.92); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        @keyframes windowClose {
+            0% { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: scale(0.9); }
+        }
+
+        .title-bar {
+            background: linear-gradient(to right, #0058e6 0%, #3a82f2 10%, #0058e6 100%);
+            color: white; padding: 4px 8px; font-weight: bold; font-size: 12px;
+            display: flex; justify-content: space-between; align-items: center; cursor: move; height: 26px;
+            user-select: none;
+        }
+        .title-bar span { display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .title-controls { display: flex; gap: 3px; align-items: center; }
+        .title-controls button {
+            width: 18px; height: 18px; font-size: 10px; font-weight: bold; border: 1px solid #fff;
+            border-radius: 3px; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: all 0.1s ease;
+        }
+        .title-controls button:active { transform: scale(0.9); }
+        .btn-close { background: linear-gradient(to bottom, #e44d32 0%, #cc1600 100%) !important; }
+        .btn-max, .btn-min { background: linear-gradient(to bottom, #3a82f2 0%, #004eae 100%) !important; }
+        .btn-close:hover { background: linear-gradient(to bottom, #ef4444 0%, #dc2626 100%) !important; }
+        .btn-max:hover, .btn-min:hover { background: linear-gradient(to bottom, #60a5fa 0%, #1e3a8a 100%) !important; }
+
+        .window-body { flex: 1; padding: 2px; overflow: hidden; background: #fff; position: relative; display: flex; flex-direction: column; }
+        .app-iframe { width: 100%; height: 100%; border: none; background: #fff; }
+
+        .resizer { width: 14px; height: 14px; background: transparent; position: absolute; right: 0; bottom: 0; cursor: se-resize; z-index: 999; }
+
+        #taskbar {
+            width: 100%; height: 30px; background: var(--xp-taskbar); position: absolute; bottom: 0; left: 0;
+            display: flex; align-items: center; justify-content: space-between; z-index: 99999; border-top: 1px solid #3d7bad;
+        }
+        .taskbar-left { display: flex; align-items: center; height: 100%; flex: 1; overflow-x: auto; }
+        #start-btn {
+            height: 100%; padding: 0 16px 0 8px; background: var(--xp-start); color: white; font-style: italic;
+            font-weight: bold; font-size: 14px; border: none; border-top-right-radius: 10px; border-bottom-right-radius: 10px;
+            box-shadow: 3px 0 6px rgba(0,0,0,0.4); cursor: pointer; display: flex; align-items: center; gap: 6px;
+            transition: all 0.1s ease; flex-shrink: 0;
+        }
+        #start-btn:active { transform: scale(0.98); }
+        .active-tasks { display: flex; align-items: center; gap: 5px; padding-left: 10px; height: 100%; overflow-x: auto; }
+        .task-tab {
+            background: #3a82f2; color: white; border: 1px solid #1a52b8; border-radius: 3px; height: 24px;
+            padding: 0 8px; font-size: 11px; display: flex; align-items: center; gap: 4px; cursor: pointer; max-width: 120px;
+            user-select: none; flex-shrink: 0; transition: all 0.15s ease; position: relative;
+        }
+        .task-tab:hover { background: #4a92f2; }
+        .task-tab.active { background: #1741b8; font-weight: bold; box-shadow: inset 0 2px 4px rgba(255,255,255,0.2); }
+
+        .system-tray { background: linear-gradient(to bottom, #0c8df6 0%, #1067bc 100%); padding: 0 12px; height: 100%; display: flex; align-items: center; color: white; font-size: 11px; gap: 10px; flex-shrink: 0; }
+        .led-indicator { width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 6px #10b981; transition: all 0.3s ease; }
+        .led-busy { background: #eab308; box-shadow: 0 0 8px #eab308; animation: pulse 1s infinite; }
+        led-offline { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+        .led-online { background: #10b981; box-shadow: 0 0 6px #10b981; }
+        .led-wifi { background: #38bdf8; box-shadow: 0 0 6px #38bdf8; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .tray-group { display: flex; align-items: center; gap: 4px; cursor: default; }
+        .tray-ico { font-size: 13px; }
+        .tray-txt { font-size: 10px; color: #e0f2fe; min-width: 26px; text-align: center; }
+
+        /* ── Draggable Bliss toolbar: docks to any of 4 edges ── */
+        .bliss-toolbar {
+            position: absolute; display: flex; align-items: center; gap: 4px;
+            background: linear-gradient(to bottom, #1a52b8 0%, #245edb 100%);
+            border: 1px solid #0c3a8a; border-radius: 4px; padding: 3px 5px;
+            z-index: 100000; box-shadow: 2px 2px 8px rgba(0,0,0,0.4);
+            user-select: none; transition: all 0.15s ease;
+        }
+        .bliss-toolbar.edge-top    { top: 4px;    left: 50%; transform: translateX(-50%); flex-direction: row; }
+        .bliss-toolbar.edge-bottom { bottom: 36px; left: 50%; transform: translateX(-50%); flex-direction: row; }
+        .bliss-toolbar.edge-left   { left: 4px;   top: 50%; transform: translateY(-50%); flex-direction: column; }
+        .bliss-toolbar.edge-right  { right: 4px;  top: 50%; transform: translateY(-50%); flex-direction: column; }
+        .bliss-grip { cursor: grab; color: #cbd5e1; font-size: 12px; padding: 0 2px; }
+        .bliss-grip:active { cursor: grabbing; }
+        .bliss-start { width: 26px; height: 26px; display:flex; align-items:center; justify-content:center;
+            background: linear-gradient(to bottom, #62b262 0%, #296029 100%); color:#fff; border-radius:3px;
+            font-size: 15px; cursor: pointer; box-shadow: inset 0 1px 2px rgba(255,255,255,0.3); }
+        .bliss-start:hover { filter: brightness(1.12); }
+        .bliss-sep { width: 1px; height: 20px; background: rgba(255,255,255,0.3); margin: 0 2px; }
+        .bliss-toolbar.edge-left .bliss-sep, .bliss-toolbar.edge-right .bliss-sep { width: 20px; height: 1px; }
+        .bliss-app { width: 26px; height: 26px; display:flex; align-items:center; justify-content:center;
+            background: rgba(255,255,255,0.12); color:#fff; border-radius:3px; font-size: 14px; cursor: pointer; }
+        .bliss-app:hover { background: rgba(255,255,255,0.28); }
+
+        #context-menu {
+            position: absolute; width: 170px; background: #ece9d8; border: 2px solid #004eae;
+            box-shadow: 3px 3px 6px rgba(0,0,0,0.4); z-index: 100000; display: none; flex-direction: column;
+            font-size: 11px; padding: 2px; animation: menuAppear 0.1s ease-out;
+        }
+        @keyframes menuAppear {
+            0% { opacity: 0; transform: scale(0.95); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        .context-item { padding: 4px 8px; cursor: pointer; color: #000; display: flex; align-items: center; gap: 6px; transition: all 0.1s ease; }
+        .context-item:hover { background: #316ac5; color: #fff; }
+        .context-divider { height: 1px; background: #aca899; margin: 2px 0; }
+
+        #window-switcher {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(15, 23, 42, 0.95); border: 2px solid #3a82f2; border-radius: 8px;
+            padding: 20px; z-index: 100001; display: none; min-width: 300px; backdrop-filter: blur(8px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+        }
+        .window-switcher-title { color: #cbd5e1; font-size: 12px; font-weight: bold; margin-bottom: 12px; }
+        .switcher-item { padding: 8px 12px; color: #cbd5e1; cursor: pointer; border-radius: 4px; transition: all 0.1s ease; margin-bottom: 4px; }
+        .switcher-item:hover, .switcher-item.selected { background: #3a82f2; color: white; }
+    </style>
+<base target="_blank">
+</head>
+<body>
+
+<div id="desktop">
+    <div class="shortcut" onclick="launchApp('explorer')"><span class="icon">📂</span>Explorer</div>
+    <div class="shortcut" onclick="launchApp('taskmanager')"><span class="icon">🖥️</span>Task Manager</div>
+    <div class="shortcut" onclick="launchApp('mermaid')"><span class="icon">🧜‍♂️</span>Diagrammer</div>
+    <div class="shortcut" onclick="launchApp('terminal')"><span class="icon">💻</span>Terminal</div>
+    <div class="shortcut" onclick="launchApp('notepad')"><span class="icon">📃</span>Notepad</div>
+    <div class="shortcut" onclick="launchApp('mindmap')"><span class="icon">🧠</span>MindMap</div>
+    <div class="shortcut" onclick="launchApp('chorus-editor')"><span class="icon">🎼</span>Chorus Editor</div>
+    <div class="shortcut" onclick="launchApp('hub')"><span class="icon">🌀</span>Ouro-Hub</div>
+    <div class="shortcut" onclick="launchApp('browser')"><span class="icon">🌎</span>Browser</div>
+    <div class="shortcut" onclick="launchApp('logos')"><span class="icon">🦀</span>Logos</div>
+    <div class="shortcut" onclick="launchApp('gamehub')"><span class="icon">🎮</span>Game Hub</div>
+    <div class="shortcut" onclick="launchApp('gallery')"><span class="icon">🖼️</span>Gallery</div>
+    <div class="shortcut" onclick="launchApp('player')"><span class="icon">🎵</span>Media Player</div>
+    <div class="shortcut" onclick="launchApp('paint')"><span class="icon">🎨</span>Paint</div>
+    <div class="shortcut" onclick="launchApp('controlpanel')"><span class="icon">⚙️</span>Control Panel</div>
+    <div class="shortcut" onclick="launchApp('substrate')"><span class="icon">🌍</span>Substrate</div>
+</div>
+
+<div id="taskbar">
+    <div class="taskbar-left">
+        <button id="start-btn" onclick="toggleStartMenu()">start</button>
+        <div class="active-tasks" id="taskbar-tabs"></div>
+    </div>
+    <div class="system-tray">
+        <div class="tray-group" id="tray-net" title="Network">
+            <span class="tray-ico">🌐</span><div class="led-indicator led-offline" id="led-net"></div>
+        </div>
+        <div class="tray-group" id="tray-ollama" title="Ollama model link">
+            <span class="tray-ico">🧠</span><div class="led-indicator led-offline" id="led-ollama"></div>
+        </div>
+        <div class="tray-group" id="tray-batt" title="Battery">
+            <span class="tray-ico" id="batt-ico">🔋</span><span class="tray-txt" id="batt-txt"></span>
+        </div>
+        <div class="tray-group" id="tray-sound" title="Audio mixer" onclick="toggleSoundbar()">
+            <span class="tray-ico">🔊</span>
+        </div>
+        <div id="tray-status" style="font-size:10px; color:#e0f2fe; margin-right:6px; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></div>
+        <div id="tray-clock"></div>
+    </div>
+</div>
+
+<!-- Floating soundbar (mini mixer) -->
+<div id="soundbar" style="display:none; position:absolute; right:8px; bottom:38px; width:240px; background:#0c1a2e; border:1px solid #3a82f2; border-radius:6px; padding:10px; z-index:100002; color:#dbeafe; font-size:11px; box-shadow:0 4px 16px rgba(0,0,0,0.5);">
+    <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><b>🔊 Mixer</b><span style="cursor:pointer;" onclick="toggleSoundbar()">✕</span></div>
+    <div style="margin-bottom:8px;">
+        <div style="margin-bottom:3px;">Volume <span id="vol-val">100</span>%</div>
+        <input type="range" id="vol-slider" min="0" max="100" value="100" style="width:100%;" oninput="setVolume(this.value)">
+    </div>
+    <div>Output device:</div>
+    <select id="audio-dev" style="width:100%; margin-top:3px; background:#1e293b; color:#dbeafe; border:1px solid #3a82f2; padding:2px;"></select>
+    <div id="audio-err" style="color:#fca5a5; font-size:10px; margin-top:4px;"></div>
+</div>
+
+<!-- Draggable Bliss launcher toolbar (4-side dockable) -->
+<div id="bliss-toolbar" class="bliss-toolbar">
+    <div class="bliss-grip" id="bliss-grip" title="Drag to any edge">⠿</div>
+    <div class="bliss-start" onclick="toggleStartMenu()" title="Bliss Menu">✿</div>
+    <div class="bliss-sep"></div>
+    <div class="bliss-app" onclick="launchApp('explorer')" title="Explorer">📂</div>
+    <div class="bliss-app" onclick="launchApp('player')" title="Media Player">🎵</div>
+    <div class="bliss-app" onclick="launchApp('logos')" title="Logos">🦀</div>
+    <div class="bliss-app" onclick="launchApp('controlpanel')" title="Control Panel">⚙️</div>
+</div>
+
+<!-- Context Menu -->
+<div id="context-menu">
+    <div class="context-item" onclick="launchApp('terminal')">💻 Open Shell</div>
+    <div class="context-item" onclick="launchApp('hub')">🌀 Open Ouro-Hub</div>
+    <div class="context-divider"></div>
+    <div class="context-item" onclick="changeWallpaper()">🎨 Next Wallpaper</div>
+    <div class="context-divider"></div>
+    <div class="context-item" onclick="dockActiveWindow('left')">⬅️ Dock Window Left</div>
+    <div class="context-item" onclick="dockActiveWindow('right')">➡️ Dock Window Right</div>
+    <div class="context-divider"></div>
+    <div class="context-item" onclick="location.reload()">🔄 Refresh Subkernel</div>
+</div>
+
+<!-- Alt+Tab Window Switcher -->
+<div id="window-switcher">
+    <div class="window-switcher-title">Switch Window (↑↓ to navigate, ENTER to select)</div>
+    <div id="switcher-list"></div>
+</div>
+
+<script>
+    window.topZ = 10;
+    window.__blissShell = true;
+    window.openWindows = window.openWindows || new Set();
+    window.winState = window.winState || {};   // id -> {min, max, dock, file}
+    window.altTabActive = false;
+    window.altTabIndex = 0;
+
+    // ── Bliss toolbar: restore docked edge SYNCHRONOUSLY (before paint) ──
+    // Persisted to localStorage so it never "forgets its place" on load.
+    (function restoreToolbar() {
+        const tb = document.getElementById('bliss-toolbar');
+        if (!tb) return;
+        const edge = localStorage.getItem('bliss26_toolbar_edge') || 'right';
+        tb.classList.add('edge-' + edge);
+        tb.dataset.edge = edge;
+
+        const grip = document.getElementById('bliss-grip');
+        let dragging = false, startX = 0, startY = 0;
+        grip.addEventListener('mousedown', (e) => {
+            dragging = true; startX = e.clientX; startY = e.clientY;
+            tb.style.transition = 'none';
+            document.addEventListener('mousemove', onDrag);
+            document.addEventListener('mouseup', endDrag);
+            e.preventDefault();
+        });
+        function onDrag(e) {
+            if (!dragging) return;
+            const w = window.innerWidth, h = window.innerHeight;
+            // Pick the nearest edge from the pointer position.
+            const left = e.clientX, top = e.clientY;
+            let edge = 'right';
+            if (top < h * 0.25) edge = 'top';
+            else if (top > h * 0.75) edge = 'bottom';
+            else if (left < w * 0.25) edge = 'left';
+            else if (left > w * 0.75) edge = 'right';
+            tb.className = 'bliss-toolbar edge-' + edge;
+        }
+        function endDrag(e) {
+            dragging = false;
+            document.removeEventListener('mousemove', onDrag);
+            document.removeEventListener('mouseup', endDrag);
+            // Finalize edge by nearest side to drop point.
+            const w = window.innerWidth, h = window.innerHeight;
+            let edge = 'right';
+            if (e.clientY < h * 0.25) edge = 'top';
+            else if (e.clientY > h * 0.75) edge = 'bottom';
+            else if (e.clientX < w * 0.25) edge = 'left';
+            else if (e.clientX > w * 0.75) edge = 'right';
+            tb.className = 'bliss-toolbar edge-' + edge;
+            tb.dataset.edge = edge;
+            localStorage.setItem('bliss26_toolbar_edge', edge);
+        }
+    })();
+
+    // ── Status polling: real kernel truth into the tray LEDs ──
+    async function pollStatus() {
+        try {
+            const net = await window.subkernel.invoke('system_net_status');
+            const ledN = document.getElementById('led-net');
+            ledN.className = `led-indicator ${net.online ? (net.interface==='Wi-Fi'?'led-wifi':'led-online') : 'led-offline'}`;
+            ledN.title = net.online ? `${net.interface}${net.ssid? ' · '+net.ssid : ''}` : 'No network';
+        } catch (e) {}
+        try {
+            const ol = await window.subkernel.invoke('ollama_status');
+            const ledO = document.getElementById('led-ollama');
+            ledO.className = `led-indicator ${ol.running ? 'led-online' : 'led-offline'}`;
+            ledO.title = ol.running ? `Ollama · ${ol.model||'ready'}` : 'Ollama offline';
+        } catch (e) {}
+        try {
+            const bt = await window.subkernel.invoke('battery_status');
+            const ico = document.getElementById('batt-ico'), txt = document.getElementById('batt-txt');
+            if (bt.present) {
+                ico.textContent = bt.charging ? '⚡' : '🔋';
+                txt.textContent = bt.percent + '%';
+                ico.title = `Battery ${bt.percent}% ${bt.charging?'(charging)':'(discharging)'}`;
+            } else { ico.textContent = '🔌'; txt.textContent = ''; ico.title = 'On AC power'; }
+        } catch (e) {}
+    }
+
+    // ── Soundbar mini-mixer ──
+    window.toggleSoundbar = function() {
+        const sb = document.getElementById('soundbar');
+        if (sb.style.display === 'none' || !sb.style.display) {
+            sb.style.display = 'block';
+            loadAudioDevices();
+        } else sb.style.display = 'none';
+    };
+    async function loadAudioDevices() {
+        const sel = document.getElementById('audio-dev');
+        const err = document.getElementById('audio-err');
+        err.textContent = '';
+        try {
+            const devs = await window.subkernel.invoke('audio_devices');
+            sel.innerHTML = devs.map(d => `<option value="${d.id}" ${d.is_default?'selected':''}>${d.name}</option>`).join('');
+        } catch (e) { err.textContent = 'Device enum failed: ' + e; }
+    }
+    window.setVolume = function(v) {
+        document.getElementById('vol-val').textContent = v;
+        // Webview-level volume (affects in-app <audio>); host master needs OS API.
+        const audioEls = document.querySelectorAll('audio');
+        audioEls.forEach(a => a.volume = v/100);
+        const player = document.getElementById('iframe-player');
+        if (player && player.contentWindow) try { player.contentWindow.postMessage({__bliss26:true, setVolume:v/100}, '*'); } catch(e){}
+    };
+    window.setAudioDevice = async function(idx) {
+        const err = document.getElementById('audio-err');
+        try { await window.subkernel.invoke('set_audio_device', { index: idx }); err.textContent=''; }
+        catch (e) { err.textContent = 'Set failed: ' + e; }
+    };
+    document.getElementById('audio-dev').addEventListener('change', (e) => window.setAudioDevice(e.target.value));
+
+    // Registry comes from the bridge — one source of truth.
+    const AppRegistry = Object.fromEntries(
+        Object.entries(window.SubkernelBridge.APPS).map(([k, v]) => [k, v.uri])
+    );
+    const AppMeta = window.SubkernelBridge.APPS;
+
+    const Wallpapers = [
+        'https://imgur.com/bD90zfF',
+        'https://imgur.com/e9HPB04',
+        'https://imgur.com/Y28XiMy',
+        'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        'linear-gradient(135deg, #003399 0%, #001133 100%)',
+        'linear-gradient(135deg, #1e1b4b 0%, #311b92 100%)'
+    ];
+    let currentWallpaperIdx = parseInt(localStorage.getItem('bliss26_wp_idx') || '0');
+
+    function applyWallpaper(idx) {
+        const desktop = document.getElementById('desktop');
+        const wp = Wallpapers[idx % Wallpapers.length];
+        if (wp.startsWith('http')) {
+            desktop.style.background = `url('${wp}') no-repeat center center`;
+            desktop.style.backgroundSize = 'cover';
+        } else {
+            desktop.style.background = wp;
+        }
+        localStorage.setItem('bliss26_wp_idx', idx % Wallpapers.length);
+    }
+
+    window.changeWallpaper = function() {
+        currentWallpaperIdx++;
+        applyWallpaper(currentWallpaperIdx);
+    };
+
+    function getOptimalWindowPosition() {
+        const desktopRect = document.getElementById('desktop').getBoundingClientRect();
+        const taskbarHeight = 30;
+        const padding = 20;
+        const width = 600, height = 450;
+        
+        if (window.openWindows.size === 0) {
+            return {
+                left: Math.max(padding, (desktopRect.width - width) / 2),
+                top: Math.max(padding, (desktopRect.height - height - taskbarHeight) / 2)
+            };
+        }
+
+        const existingWindows = Array.from(document.querySelectorAll('.window'));
+        let offset = Math.min(existingWindows.length * 20, 150);
+        let left = padding + offset;
+        let top = padding + offset;
+
+        if (left + width > desktopRect.width - padding) {
+            left = padding;
+            top = Math.min(top, desktopRect.height - height - taskbarHeight - padding);
+        }
+        if (top + height > desktopRect.height - taskbarHeight - padding) {
+            top = padding;
+        }
+
+        return { left, top };
+    }
+
+    window.launchApp = function(id, opts = {}) {
+        let win = document.getElementById(id);
+        const fresh = !win;
+        if (fresh) {
+            win = createIframeWindowNode(id);
+            document.getElementById('desktop').appendChild(win);
+            initializeWindowInteractions(win);
+        }
+        win.style.display = 'flex';
+        win.classList.remove('closing');
+        window.winState[id] = Object.assign(window.winState[id] || {}, { min: false });
+        focusWindow(id);
+        window.openWindows.add(id);
+        renderTaskTabs();
+        announceWindows();
+
+        // Route a file payload into the app once its iframe is ready.
+        if (opts.file) {
+            window.winState[id].file = opts.file;
+            const deliver = () => window.subkernel.emit(id, 'open-file', {
+                path: opts.file, filename: opts.filename || String(opts.file).split(/[\\/]/).pop()
+            });
+            const frame = document.getElementById(`iframe-${id}`);
+            if (fresh && frame) frame.addEventListener('load', () => setTimeout(deliver, 60), { once: true });
+            else setTimeout(deliver, 30);
+        }
+        return id;
+    };
+
+    function createIframeWindowNode(id) {
+        const win = document.createElement('div');
+        win.id = id;
+        win.className = 'window';
+        win.dataset.app = id;
+
+        const pos = getOptimalWindowPosition();
+        win.style.left = `${pos.left}px`;
+        win.style.top = `${pos.top}px`;
+
+        const meta = AppMeta[id] || { icon: '📦', title: id };
+        win.innerHTML = `
+            <div class="title-bar" onmousedown="focusWindow('${id}')">
+                <span>${meta.icon} ${meta.title}</span>
+                <div class="title-controls">
+                    <button class="btn-min" onclick="minimizeWin('${id}'); event.stopPropagation();" title="Minimize">_</button>
+                    <button class="btn-max" onclick="maximizeWin('${id}'); event.stopPropagation();" title="Maximize">❑</button>
+                    <button class="btn-close" onclick="closeWin('${id}'); event.stopPropagation();" title="Close">X</button>
+                </div>
+            </div>
+            <div class="window-body">
+                <iframe id="iframe-${id}" class="app-iframe" src="${AppRegistry[id] || `apps/${id}.html`}"></iframe>
+                <div class="resizer"></div>
+            </div>
+        `;
+        return win;
+    }
+
+    window.focusWindow = function(id) {
+        const win = document.getElementById(id);
+        if (win) {
+            window.topZ++;
+            win.style.zIndex = window.topZ;
+            renderTaskTabs();
+            announceWindows();
+        }
+    };
+
+    window.minimizeWin = function(id) {
+        const win = document.getElementById(id);
+        if (!win) return;
+        win.style.display = 'none';
+        (window.winState[id] = window.winState[id] || {}).min = true;
+        renderTaskTabs();
+        announceWindows();
+    };
+
+    window.maximizeWin = function(id) {
+        const win = document.getElementById(id);
+        if (!win) return;
+        win.classList.remove('dock-left', 'dock-right');
+        win.classList.toggle('maximized');
+        (window.winState[id] = window.winState[id] || {}).max = win.classList.contains('maximized');
+        announceWindows();
+    };
+
+    window.closeWin = function(id) {
+        const win = document.getElementById(id);
+        if (!win) return;
+        win.classList.add('closing');
+        setTimeout(() => {
+            win.remove();
+            window.openWindows.delete(id);
+            delete window.winState[id];
+            renderTaskTabs();
+            announceWindows();
+        }, 200);
+    };
+
+    /** Publish the live window table so Task Manager shows real windows. */
+    function announceWindows() {
+        const list = Array.from(window.openWindows).map(id => {
+            const win = document.getElementById(id);
+            const st = window.winState[id] || {};
+            const meta = AppMeta[id] || { title: id, kind: 'app' };
+            return {
+                id,
+                title: meta.title,
+                kind: meta.kind || 'app',
+                visible: !!win && win.style.display !== 'none',
+                minimized: !!st.min,
+                maximized: !!st.max,
+                focused: !!win && parseInt(win.style.zIndex) === window.topZ,
+                file: st.file || null,
+                z: win ? parseInt(win.style.zIndex) || 0 : 0,
+            };
+        });
+        window.subkernel.emit('Shell', 'windows', { windows: list });
+        window.subkernel.state.windows = list;
+    }
+    window.announceWindows = announceWindows;
+
+    function renderTaskTabs() {
+        const container = document.getElementById('taskbar-tabs');
+        if (!container) return;
+        container.innerHTML = '';
+        window.openWindows.forEach(id => {
+            const win = document.getElementById(id);
+            if (!win) return;
+            const meta = AppMeta[id] || { icon: '📦', title: id };
+            const isVisible = win.style.display !== 'none';
+            const isActive = parseInt(win.style.zIndex) === window.topZ;
+            const tab = document.createElement('div');
+            tab.className = `task-tab ${isActive && isVisible ? 'active' : ''}`;
+            tab.innerText = `${meta.icon} ${meta.title}`;
+            tab.title = `${isVisible ? 'Minimize' : 'Restore'} ${meta.title}`;
+            tab.onclick = () => {
+                if (isVisible && isActive) { minimizeWin(id); return; }
+                win.style.display = 'flex';
+                (window.winState[id] = window.winState[id] || {}).min = false;
+                focusWindow(id);
+            };
+            container.appendChild(tab);
+        });
+    }
+
+    function initializeWindowInteractions(win) {
+        const titleBar = win.querySelector('.title-bar');
+        const resizer = win.querySelector('.resizer');
+
+        const toggleIframeEvents = (enable) => {
+            document.querySelectorAll('iframe').forEach(iframe => {
+                iframe.style.pointerEvents = enable ? 'auto' : 'none';
+            });
+        };
+
+        if (titleBar) {
+            titleBar.onmousedown = (e) => {
+                if (e.target.tagName === 'BUTTON') return;
+                focusWindow(win.id);
+                toggleIframeEvents(false);
+
+                let startX = e.clientX, startY = e.clientY;
+                let initialLeft = win.offsetLeft, initialTop = win.offsetTop;
+
+                document.onmousemove = (me) => {
+                    win.style.left = `${initialLeft + (me.clientX - startX)}px`;
+                    win.style.top = `${initialTop + (me.clientY - startY)}px`;
+                };
+
+                document.onmouseup = () => {
+                    toggleIframeEvents(true);
+                    document.onmousemove = null;
+                    document.onmouseup = null;
+                };
+            };
+        }
+
+        if (resizer) {
+            resizer.onmousedown = (e) => {
+                e.stopPropagation();
+                focusWindow(win.id);
+                toggleIframeEvents(false);
+
+                let startX = e.clientX, startY = e.clientY;
+                let initialWidth = win.offsetWidth, initialHeight = win.offsetHeight;
+
+                document.onmousemove = (me) => {
+                    if (!win.classList.contains('maximized') && !win.classList.contains('dock-left') && !win.classList.contains('dock-right')) {
+                        win.style.width = `${Math.max(350, initialWidth + (me.clientX - startX))}px`;
+                        win.style.height = `${Math.max(250, initialHeight + (me.clientY - startY))}px`;
+                    }
+                };
+
+                document.onmouseup = () => {
+                    toggleIframeEvents(true);
+                    document.onmousemove = null;
+                    document.onmouseup = null;
+                };
+            };
+        }
+    }
+
+    function updateClock() {
+        const clock = document.getElementById('tray-clock');
+        if (clock) {
+            const now = new Date();
+            let h = now.getHours(), m = now.getMinutes();
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            h = h % 12 || 12;
+            clock.textContent = `${h}:${String(m).padStart(2, '0')} ${ampm}`;
+        }
+    }
+
+    const startMenuHTML = `
+        <div id="start-menu" style="
+            position:absolute; bottom:30px; left:0; width:220px;
+            background: linear-gradient(to right, #1a52b8 0%, #245edb 30%, #ece9d8 30%);
+            border: 2px solid #004eae; box-shadow: 4px -4px 10px rgba(0,0,0,0.5);
+            z-index: 100001; display:none; flex-direction:column; font-size:12px;
+            animation: menuSlideUp 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        ">
+            <style>
+                @keyframes menuSlideUp {
+                    0% { opacity: 0; transform: translateY(10px); }
+                    100% { opacity: 1; transform: translateY(0); }
+                }
+            </style>
+            <div style="padding:8px 8px 8px 40px; color:#fff; font-weight:bold; font-size:14px; font-style:italic; background: linear-gradient(to bottom, #2a6dd9, #1741b8); border-bottom:1px solid #0c3a8a;">
+                CloudOS
+            </div>
+            ${Object.keys(AppRegistry).map(id => `
+                <div onclick="launchApp('${id}'); toggleStartMenu();" style="
+                    padding:6px 10px 6px 40px; color:#000; cursor:pointer; background:#ece9d8;
+                    border-bottom:1px solid #d4d0c8; transition: all 0.1s;
+                " onmouseover="this.style.background='#316ac5';this.style.color='#fff'"
+                   onmouseout="this.style.background='#ece9d8';this.style.color='#000'">
+                    ${id.charAt(0).toUpperCase() + id.slice(1)}
+                </div>
+            `).join('')}
+            <div style="border-top:2px solid #aca899; margin-top:2px;"></div>
+            <div onclick="location.reload()" style="
+                padding:6px 10px 6px 40px; color:#000; cursor:pointer; background:#ece9d8;
+                transition: all 0.1s;
+            " onmouseover="this.style.background='#316ac5';this.style.color='#fff'"
+               onmouseout="this.style.background='#ece9d8';this.style.color='#000'">
+                🔄 Restart
+            </div>
+        </div>
+    `;
+
+    window.toggleStartMenu = function() {
+        const menu = document.getElementById('start-menu');
+        if (menu) menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
+    };
+
+    document.addEventListener('click', (e) => {
+        const menu = document.getElementById('start-menu');
+        const startBtn = document.getElementById('start-btn');
+        if (menu && !menu.contains(e.target) && e.target !== startBtn) {
+            menu.style.display = 'none';
+        }
+    });
+
+    document.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const menu = document.getElementById('context-menu');
+        menu.style.display = 'flex';
+        menu.style.left = `${e.clientX}px`;
+        menu.style.top = `${e.clientY}px`;
+    });
+
+    document.addEventListener('click', () => {
+        document.getElementById('context-menu').style.display = 'none';
+    });
+
+    window.dockActiveWindow = function(side) {
+        const activeWin = Array.from(document.querySelectorAll('.window')).find(w => parseInt(w.style.zIndex) === window.topZ);
+        if (activeWin) {
+            activeWin.classList.remove('maximized', 'dock-left', 'dock-right');
+            activeWin.classList.add(`dock-${side}`);
+        }
+        document.getElementById('context-menu').style.display = 'none';
+    };
+
+    // Transient status line in the system tray.
+    let __statusTimer = null;
+    function setStatus(msg) {
+        const el = document.getElementById('tray-status');
+        if (!el) return;
+        el.textContent = msg;
+        clearTimeout(__statusTimer);
+        __statusTimer = setTimeout(() => { el.textContent = ''; }, 4000);
+    }
+    window.setStatus = setStatus;
+
+    // ── Shell command surface: every panel drives windows through here ──
+    const S = window.subkernel;
+
+    // ── Cross-app routing: signals that must reach a live surface ──
+    S.on('GameHub', 'launch', ({ game }) => {
+        if (!game) return;
+        launchApp('gamehub-' + game, {
+            uri: 'games/' + game + '.html',
+            title: game.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+            icon: '🎮'
+        });
+    });
+
+    S.on('Notepad', 'saved', ({ path }) => setStatus('Saved ' + String(path).split(/[\\/]/).pop()));
+    S.on('Notepad', 'opened', ({ path }) => setStatus('Opened ' + String(path).split(/[\\/]/).pop()));
+    S.on('Floret', 'mapped', ({ path, count }) => setStatus('Floret mapped ' + count + ' items'));
+    S.on('Diagrammer', 'ready', () => setStatus('Diagrammer online'));
+
+    // Gateway port already owned by a zombie instance → this launch would be a
+    // blank window. Warn the operator loud-and-clear instead of silently dying.
+    S.on('bliss26:gateway-blocked', ({ port }) => {
+        const m = `⚠ Gateway port ${port} held by another instance — kill bliss26-subkernel.exe and relaunch`;
+        setStatus(m);
+        console.warn('[shell] ' + m);
+        const banner = document.createElement('div');
+        banner.style.cssText = 'position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:200000;background:#7f1d1d;color:#fee2e2;padding:8px 14px;border:1px solid #f87171;border-radius:6px;font:12px/1.4 monospace;max-width:80vw;text-align:center;';
+        banner.textContent = m;
+        document.body.appendChild(banner);
+        setTimeout(() => banner.remove(), 9000);
+    });
+
+    S.on('Shell', 'open-app',     ({ app, file, filename }) => launchApp(app, { file, filename }));
+    S.on('Shell', 'close-app',    ({ app }) => closeWin(app));
+    S.on('Shell', 'focus-app',    ({ app }) => { const w = document.getElementById(app); if (w) { w.style.display='flex'; focusWindow(app); } });
+    S.on('Shell', 'minimize-app', ({ app }) => minimizeWin(app));
+    S.on('Shell', 'maximize-app', ({ app }) => maximizeWin(app));
+    S.on('Shell', 'dock-app',     ({ app, side }) => {
+        const w = document.getElementById(app);
+        if (!w) return;
+        w.classList.remove('maximized','dock-left','dock-right');
+        if (side) w.classList.add(`dock-${side}`);
+        announceWindows();
+    });
+    S.on('Shell', 'close-all', () => Array.from(window.openWindows).forEach(closeWin));
+    S.on('Shell', 'tile-all', () => tileWindows());
+    S.on('Shell', 'windows-request', () => announceWindows());
+    S.on('Shell', 'wallpaper', ({ index, url }) => {
+        if (url) { const d = document.getElementById('desktop'); d.style.background = `url('${url}') no-repeat center center`; d.style.backgroundSize='cover'; return; }
+        if (typeof index === 'number') applyWallpaper(index);
+    });
+
+    // Explorer (or anything) asking to open a path with its associated app.
+    S.on('System', 'open-path', ({ path, filename }) => {
+        window.SubkernelBridge.openPath(path, filename);
+    });
+
+    // Cross-app: a surface may ask the shell to run a kernel command for it.
+    S.on('Shell', 'invoke', async ({ cmd, args, replyTo }) => {
+        try {
+            const result = await S.invoke(cmd, args || {});
+            S.emit(replyTo || 'Shell', 'invoke:reply', { ok: true, cmd, result });
+        } catch (e) {
+            S.emit(replyTo || 'Shell', 'invoke:reply', { ok: false, cmd, error: String(e) });
+        }
+    });
+
+    function tileWindows() {
+        const ids = Array.from(window.openWindows).filter(id => {
+            const w = document.getElementById(id);
+            return w && w.style.display !== 'none';
+        });
+        if (!ids.length) return;
+        const area = document.getElementById('desktop').getBoundingClientRect();
+        const cols = Math.ceil(Math.sqrt(ids.length));
+        const rows = Math.ceil(ids.length / cols);
+        const cw = Math.floor(area.width / cols);
+        const ch = Math.floor((area.height) / rows);
+        ids.forEach((id, i) => {
+            const w = document.getElementById(id);
+            w.classList.remove('maximized','dock-left','dock-right');
+            w.style.left   = `${(i % cols) * cw}px`;
+            w.style.top    = `${Math.floor(i / cols) * ch}px`;
+            w.style.width  = `${cw - 6}px`;
+            w.style.height = `${ch - 6}px`;
+        });
+        announceWindows();
+    }
+    window.tileWindows = tileWindows;
+
+    // Legacy postMessage shim: older panels still speak kernelAction.
+    window.addEventListener('message', (e) => {
+        const d = e.data;
+        if (!d || d.__bliss26) {
+            // Volume relay from the soundbar into the media player iframe.
+            if (d && d.setVolume !== undefined) {
+                const player = document.getElementById('iframe-player');
+                if (player && player.contentWindow) {
+                    try { player.contentWindow.postMessage({ __bliss26: true, setVolume: d.setVolume }, '*'); } catch (_) {}
+                }
+            }
+            return;
+        }
+        if (d.kernelAction === 'LAUNCH_APP')       launchApp(d.targetApp, { file: d.initialPath });
+        if (d.kernelAction === 'LAUNCH_WITH_FILE') launchApp(d.targetApp, { file: d.filePath, filename: d.filename });
+        if (d.kernelAction === 'CLOSE_WINDOW' && e.source) {
+            const frame = Array.from(document.querySelectorAll('iframe')).find(f => f.contentWindow === e.source);
+            if (frame) closeWin(frame.id.replace('iframe-', ''));
+        }
+    });
+
+    window.onload = () => {
+        document.body.insertAdjacentHTML('beforeend', startMenuHTML);
+        applyWallpaper(currentWallpaperIdx);
+        updateClock();
+        setInterval(updateClock, 1000);
+        announceWindows();
+        // Heartbeat so late-booting panels always converge on truth.
+        setInterval(announceWindows, 2000);
+        // Real status polling into the tray (network / ollama / battery).
+        pollStatus();
+        setInterval(pollStatus, 5000);
+    };
+</script>
+</body>
+</html>

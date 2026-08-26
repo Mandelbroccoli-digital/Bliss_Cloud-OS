@@ -1,0 +1,302 @@
+successfully downloaded text file (SHA: 347f9466957b5e6b07aee9d0a9ee7ff443ffb28e)
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="../subkernel-bus.js"></script>
+<script src="../subkernel-bridge.js"></script>
+<meta charset="UTF-8">
+<title>Logos 🦀 // Subkernel Intelligence</title>
+<style>
+:root{--bg:#060a10;--panel:#0f172a;--card:#151c2b;--line:rgba(255,255,255,.10);
+--fg:#e8eef7;--dim:#8b98ad;--accent:#38bdf8;--accent2:#818cf8;--ok:#22c55e;--warn:#fbbf24;--err:#f87171;}
+[data-theme="xp"]{--bg:#ece9d8;--panel:#f1efe2;--card:#fff;--line:#aca899;--fg:#000;--dim:#555;--accent:#0055ea;--accent2:#316ac5;}
+[data-theme="slate"]{--bg:#2b303b;--panel:#353c4a;--card:#1e222a;--line:#4a5060;--fg:#e2e8f0;--dim:#94a3b8;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:"JetBrains Mono",Consolas,monospace;font-size:11px;background:var(--bg);color:var(--fg);
+height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:7px 11px;
+background:var(--panel);border-bottom:1px solid var(--line);flex-shrink:0;}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;}
+.crab{width:27px;height:27px;border-radius:7px;display:flex;align-items:center;justify-content:center;
+font-size:15px;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 0 13px rgba(56,189,248,.4);}
+.sub{font-size:9px;color:var(--dim);letter-spacing:.11em;text-transform:uppercase;font-weight:400;}
+.pill{background:rgba(0,0,0,.28);border:1px solid var(--line);padding:2px 8px;border-radius:4px;
+font-size:9px;color:var(--dim);}
+.pill.live{color:var(--ok);border-color:rgba(34,197,94,.4);}
+.pill.off{color:var(--err);border-color:rgba(248,113,113,.4);}
+.body{flex:1;display:grid;grid-template-columns:230px 1fr;min-height:0;height:calc(100vh - 42px);}
+.side{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:9px;
+display:flex;flex-direction:column;gap:9px;}
+.grp{border:1px solid var(--line);border-radius:6px;background:var(--card);}
+.grp h4{font-size:9px;text-transform:uppercase;letter-spacing:.09em;color:var(--dim);
+padding:5px 8px;border-bottom:1px solid var(--line);}
+.grp .in{padding:7px 8px;display:flex;flex-direction:column;gap:6px;}
+label{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;}
+select,input[type=text],input[type=password],textarea{width:100%;background:var(--bg);color:var(--fg);
+border:1px solid var(--line);border-radius:4px;padding:4px 6px;font-family:inherit;font-size:10px;outline:none;}
+select:focus,input:focus,textarea:focus{border-color:var(--accent);}
+.tog{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:10px;color:var(--fg);}
+.tog input{accent-color:var(--accent);}
+.btn{background:var(--card);border:1px solid var(--line);color:var(--fg);padding:4px 9px;
+border-radius:4px;cursor:pointer;font-family:inherit;font-size:10px;}
+.btn:hover{border-color:var(--accent);color:var(--accent);}
+.btn.pri{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#04121f;font-weight:700;border:none;}
+.btn.pri:hover{opacity:.9;color:#04121f;}
+.btn.mini{padding:2px 6px;font-size:9px;}
+.btn.danger{color:var(--err);border-color:rgba(248,113,113,.4);}
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--bg);height:100%;}
+.tabs{display:flex;gap:3px;padding:6px 9px 0;background:var(--panel);border-bottom:1px solid var(--line);flex-shrink:0;}
+.tab{padding:5px 13px;border-radius:5px 5px 0 0;cursor:pointer;font-size:10px;color:var(--dim);
+border:1px solid transparent;border-bottom:none;}
+.tab.on{background:var(--bg);border-color:var(--line);color:var(--accent);font-weight:700;}
+.pane{flex:1;display:none;flex-direction:column;min-height:0;min-width:0;height:calc(100% - 31px);}
+.pane.on{display:flex;}
+.stream{flex:1;overflow-y:scroll;overflow-x:hidden;padding:13px;display:flex;flex-direction:column;gap:11px;min-height:0;}
+.msg{display:flex;gap:9px;max-width:92%;}
+.msg.u{margin-left:auto;flex-direction:row-reverse;}
+.av{width:25px;height:25px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+flex-shrink:0;font-size:12px;background:var(--card);border:1px solid var(--line);}
+.msg.u .av{background:var(--accent);color:#04121f;border:none;}
+.bub{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:8px 11px;
+line-height:1.55;overflow-x:auto;font-size:11px;}
+.msg.u .bub{background:rgba(56,189,248,.13);border-color:rgba(56,189,248,.3);}
+.bub pre{background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:7px;margin:6px 0;overflow-x:auto;}
+.bub code{color:var(--accent);}
+.bub p{margin:4px 0;}
+.tool{border:1px solid rgba(129,140,248,.35);background:rgba(129,140,248,.08);border-radius:6px;
+padding:6px 9px;font-size:10px;color:var(--accent2);margin:5px 0;}
+.tool .nm{font-weight:700;display:flex;align-items:center;gap:6px;}
+.tool pre{background:rgba(0,0,0,.3);border:none;font-size:9px;max-height:150px;color:var(--dim);}
+.tool.ok{border-color:rgba(34,197,94,.35);background:rgba(34,197,94,.07);color:var(--ok);}
+.tool.err{border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.07);color:var(--err);}
+.compose{border-top:1px solid var(--line);padding:9px;display:flex;gap:7px;background:var(--panel);flex-shrink:0;}
+.compose textarea{flex:1;resize:none;min-height:38px;max-height:132px;font-size:11px;padding:8px;}
+.send{width:40px;border-radius:6px;flex-shrink:0;font-size:15px;}
+.status{padding:3px 11px;border-top:1px solid var(--line);background:var(--panel);
+display:flex;justify-content:space-between;font-size:9px;color:var(--dim);flex-shrink:0;}
+.log{flex:1;overflow-y:auto;background:#05080d;color:#3f7;font-family:inherit;font-size:10px;padding:9px;}
+.log .w{color:var(--warn);} .log .e{color:var(--err);} .log .i{color:var(--accent);}
+.tools-tbl{width:100%;border-collapse:collapse;font-size:10px;}
+.tools-tbl th{text-align:left;padding:5px 8px;color:var(--dim);border-bottom:1px solid var(--line);
+font-size:9px;text-transform:uppercase;position:sticky;top:0;background:var(--bg);}
+.tools-tbl td{padding:4px 8px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top;}
+.tag-badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:8px;margin-right:3px;background:var(--card);border:1px solid var(--line);}
+.dim{color:var(--dim);}
+.spin{display:inline-block;animation:sp 1s linear infinite;}
+@keyframes sp{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body data-theme="dark">
+
+<div class="hdr">
+  <div class="brand">
+    <div class="crab">🦀</div>
+    <div>
+      <div>LOGOS</div>
+      <div class="sub">Subkernel Intelligence</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:5px;align-items:center;">
+    <span class="pill" id="p-provider">OLLAMA</span>
+    <span class="pill" id="p-kernel">KERNEL READY</span>
+    <span class="pill" id="p-agent">IDLE</span>
+  </div>
+</div>
+
+<div class="body">
+  <div class="side">
+    <div class="grp"><h4>Provider Selector</h4><div class="in">
+      <select id="provider" onchange="onProviderChange()">
+        <option value="ollama">🏠 Ollama (Local)</option>
+        <option value="openrouter">🌐 OpenRouter</option>
+        <option value="gemini">✨ Google Gemini</option>
+      </select>
+      
+      <label>Model Engine</label>
+      <div style="display:flex;gap:4px;">
+        <select id="model" style="flex:1" onchange="setModel(this.value)"><option>Select Model...</option></select>
+        <button class="btn mini" onclick="refreshModels()" title="Fetch Remote Tags">🔄</button>
+      </div>
+      <input type="text" id="model-custom" placeholder="or type a model id (e.g. anthropic/claude-3.5-sonnet)" oninput="setModel(this.value)" spellcheck="false">
+
+      <div id="remote-cfg" style="display:flex;flex-direction:column;gap:6px;">
+        <label>Endpoint URL</label>
+        <input type="text" id="endpoint" value="http://localhost:11434" spellcheck="false">
+        <label>API Key Verification</label>
+        <input type="password" id="apikey" placeholder="Paste Key..." oninput="onKeyInput()">
+        <button class="btn mini pri" onclick="verifyAndInspectTags()">Check Key &amp; Model Tags</button>
+        <div class="dim" id="key-hint" style="font-size:9px;min-height:12px;word-break:break-all;"></div>
+      </div>
+
+    </div></div>
+
+    <div class="grp"><h4>Active Model Tags</h4><div class="in" id="tag-container">
+      <div class="dim">No active tags checked.</div>
+    </div></div>
+
+    <div class="grp"><h4>Agency</h4><div class="in">
+      <label class="tog"><input type="checkbox" id="tools-on" checked onchange="saveCfg()"> Kernel tool-calling</label>
+      <label class="tog"><input type="checkbox" id="auto-on" onchange="saveCfg()"> Autonomous loop</label>
+      <label>Max tool steps</label>
+      <input type="text" id="max-steps" value="8" onchange="saveCfg()">
+      <label class="tog"><input type="checkbox" id="confirm-writes" checked onchange="saveCfg()"> Confirm writes/exec</label>
+    </div></div>
+
+    <div class="grp"><h4>Context Routing</h4><div class="in">
+      <div class="dim" id="ctx-info">no context bound</div>
+      <button class="btn mini" onclick="bindExplorer()">📁 Bind Explorer path</button>
+      <button class="btn mini" onclick="bindNotepad()">📝 Pull Notepad buffer</button>
+      <button class="btn mini danger" onclick="clearCtx()">Clear context</button>
+    </div></div>
+  </div>
+
+  <div class="main">
+    <div class="tabs">
+      <div class="tab on" data-p="chat"  onclick="setPane('chat')">💬 Thread</div>
+      <div class="tab"    data-p="session" onclick="setPane('session')">💾 Session Manager</div>
+      <div class="tab"    data-p="tools" onclick="setPane('tools')">🛠️ Tools</div>
+      <div class="tab"    data-p="trace" onclick="setPane('trace')">📊 Trace</div>
+    </div>
+
+    <div class="pane on" id="pane-chat">
+      <div class="stream" id="stream"></div>
+      <div class="compose">
+        <textarea id="input" placeholder="Ask Logos. It can read, write and run inside this subkernel…"></textarea>
+        <button class="btn pri send" onclick="send()" id="send-btn">►</button>
+      </div>
+      <div class="status">
+        <span id="s-left">Ready</span>
+        <span id="s-right">Session: Active</span>
+      </div>
+    </div>
+
+    <div class="pane" id="pane-session">
+      <div style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;">
+        <h4>Subkernel SessionStorage Retention</h4>
+        <div class="dim">Manage state retention for Logos across kernel execution cycles.</div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn mini pri" onclick="saveSessionToStorage()">Save Active Thread</button>
+          <button class="btn mini" onclick="loadSessionFromStorage()">Restore Session</button>
+          <button class="btn mini danger" onclick="clearSessionStorage()">Clear Storage</button>
+        </div>
+        <div class="grp" style="margin-top:8px;">
+          <h4>Stored Session Inspector</h4>
+          <div class="in">
+            <pre id="session-json" style="font-size:9px;color:var(--accent);max-height:220px;overflow:auto;">Empty Session</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pane" id="pane-tools">
+      <div style="flex:1;overflow-y:auto;padding:9px;">
+        <table class="tools-tbl"><thead><tr><th>Tool</th><th>Arguments</th><th>Effect</th></tr></thead>
+        <tbody id="tools-body"></tbody></table>
+      </div>
+    </div>
+
+    <div class="pane" id="pane-trace"><div class="log" id="trace"></div></div>
+  </div>
+</div>
+
+<script>
+function setPane(p) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.p === p));
+  document.querySelectorAll('.pane').forEach(el => el.classList.toggle('on', el.id === 'pane-' + p));
+}
+
+function onKeyInput() {
+  const k = document.getElementById('apikey').value.trim();
+  const hint = document.getElementById('key-hint');
+  if(k.startsWith("sk-or-")) {
+    document.getElementById('provider').value = "openrouter";
+    hint.textContent = "Detected: OpenRouter API Key";
+  } else if(k.startsWith("AIzaSy")) {
+    document.getElementById('provider').value = "gemini";
+    hint.textContent = "Detected: Google Gemini Key";
+  } else {
+    hint.textContent = k.length > 0 ? "Custom or Generic Endpoint Key" : "";
+  }
+  onProviderChange();
+}
+
+function onProviderChange() {
+  const prov = document.getElementById('provider').value;
+  const ep = document.getElementById('endpoint');
+  document.getElementById('p-provider').textContent = prov.toUpperCase();
+  if(prov === 'ollama') {
+    ep.value = "http://localhost:11434";
+  } else if(prov === 'openrouter') {
+    ep.value = "https://openrouter.ai/api/v1";
+  } else if(prov === 'gemini') {
+    ep.value = "https://generativelanguage.googleapis.com";
+  }
+}
+
+function verifyAndInspectTags() {
+  const prov = document.getElementById('provider').value;
+  const key = document.getElementById('apikey').value;
+  const tagBox = document.getElementById('tag-container');
+  const modelSel = document.getElementById('model');
+  
+  tagBox.innerHTML = '<span class="spin">🔄</span> Querying endpoint tags...';
+  
+  if(prov === 'ollama') {
+    fetch(document.getElementById('endpoint').value + '/api/tags')
+      .then(r => r.json())
+      .then(d => {
+        modelSel.innerHTML = '';
+        tagBox.innerHTML = '';
+        d.models.forEach(m => {
+          let opt = document.createElement('option');
+          opt.value = m.name; opt.textContent = m.name;
+          modelSel.appendChild(opt);
+          tagBox.innerHTML += `<span class="tag-badge">${m.name}</span>`;
+        });
+      }).catch(e => { tagBox.innerHTML = '<span style="color:var(--err)">Ollama Offline</span>'; });
+  } else {
+    tagBox.innerHTML = `<span class="tag-badge">${prov} Ready</span><span class="tag-badge">Auth: ${key ? 'Set' : 'Missing'}</span>`;
+  }
+}
+
+function saveSessionToStorage() {
+  const stream = document.getElementById('stream').innerHTML;
+  sessionStorage.setItem('logos_subkernel_thread', stream);
+  updateSessionInspector();
+}
+
+function loadSessionFromStorage() {
+  const stream = sessionStorage.getItem('logos_subkernel_thread');
+  if(stream) {
+    document.getElementById('stream').innerHTML = stream;
+    const s = document.getElementById('stream');
+    s.scrollTop = s.scrollHeight;
+  }
+  updateSessionInspector();
+}
+
+function clearSessionStorage() {
+  sessionStorage.removeItem('logos_subkernel_thread');
+  updateSessionInspector();
+}
+
+function updateSessionInspector() {
+  const stream = sessionStorage.getItem('logos_subkernel_thread');
+  document.getElementById('session-json').textContent = stream ? stream.substring(0, 300) + '...' : 'Empty Session';
+}
+
+function scrollToBottom() {
+  const s = document.getElementById('stream');
+  s.scrollTop = s.scrollHeight;
+}
+
+// Initial session restoration check
+window.addEventListener('load', () => {
+  loadSessionFromStorage();
+  updateSessionInspector();
+});
+</script>
+<script src="../logos-tools.js"></script>
+<script src="../logos-engine.js"></script>
+</body>
+</html>

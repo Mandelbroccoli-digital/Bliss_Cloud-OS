@@ -1,0 +1,512 @@
+successfully downloaded text file (SHA: 7d4b0aadb1e0e724c6a259b843d7508db12ec82f)
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="../subkernel-bus.js"></script>
+<script src="../subkernel-bridge.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bliss Control Panel</title>
+<style>
+:root {
+  --bg:#ece9d8; --card:#f1efe2; --surface:#fff; --text:#000;
+  --accent-color:#0055ea; --border:#004eae; --muted:#555;
+  --hdr-a:#0058e6; --hdr-b:#3a93ff;
+}
+[data-theme="dark"] {
+  --bg:#1e222a; --card:#262b34; --surface:#12151a; --text:#d7dce4;
+  --border:#10141a; --muted:#93a0b4; --hdr-a:#1b2a44; --hdr-b:#2c4a7a;
+}
+[data-theme="slate"] {
+  --bg:#2b303b; --card:#353c4a; --surface:#1e222a; --text:#e2e8f0;
+  --border:#1a1e26; --muted:#94a3b8; --hdr-a:#334155; --hdr-b:#475569;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body {
+  font-family:"Tahoma","Segoe UI",sans-serif; font-size:11px;
+  background:var(--bg); color:var(--text); height:100vh;
+  display:flex; flex-direction:column; user-select:none; overflow:hidden;
+}
+.hdr { background:linear-gradient(90deg,var(--hdr-a),var(--hdr-b)); color:#fff;
+  padding:6px 10px; display:flex; justify-content:space-between; align-items:center; font-weight:bold; }
+.pill { background:rgba(0,0,0,.3); padding:1px 7px; border-radius:3px; font-family:monospace; font-weight:normal; font-size:10px; }
+.body { flex:1; display:flex; min-height:0; }
+.nav { width:150px; background:var(--card); border-right:1px solid var(--border); padding:6px 0; overflow-y:auto; flex-shrink:0; }
+.nav div { padding:6px 12px; cursor:pointer; border-left:3px solid transparent; }
+.nav div:hover { background:rgba(0,85,234,.10); }
+.nav div.on { background:rgba(0,85,234,.18); border-left-color:var(--accent-color); font-weight:bold; color:var(--accent-color); }
+.pane { flex:1; overflow-y:auto; padding:10px; min-width:0; }
+.card { background:var(--card); border:1px solid var(--border); margin-bottom:10px; }
+.card > h3 { background:rgba(0,0,0,.08); padding:5px 9px; font-size:11px; border-bottom:1px solid rgba(128,128,128,.35); display:flex; justify-content:space-between; align-items:center; }
+.card > .in { padding:9px; display:flex; flex-direction:column; gap:8px; }
+.row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.row > label { min-width:118px; color:var(--muted); }
+.btn { background:linear-gradient(180deg,#fff,#e3e0d0); border:1px solid #7f9db9; padding:3px 10px;
+  cursor:pointer; border-radius:2px; font-size:11px; font-family:inherit; color:#000; }
+.btn:hover { background:linear-gradient(180deg,#eaf2ff,#b5d3ff); border-color:#3c7fb1; }
+.btn:active { box-shadow:inset 1px 1px 3px rgba(0,0,0,.3); }
+.btn.danger { color:#9b1c1c; border-color:#c05252; background:linear-gradient(180deg,#fff5f5,#ffdada); }
+.btn.mini { padding:1px 7px; font-size:9px; }
+.btn.on { background:linear-gradient(180deg,#bbf7d0,#4ade80); border-color:#16a34a; }
+input[type=text], input[type=number], select {
+  border:1px solid #7f9db9; padding:2px 5px; font-size:11px; font-family:inherit;
+  background:var(--surface); color:var(--text); }
+input[type=range] { width:150px; }
+input[type=color] { width:38px; height:22px; padding:0; border:1px solid #7f9db9; background:none; }
+table { width:100%; border-collapse:collapse; font-size:11px; }
+th { text-align:left; background:rgba(0,0,0,.07); padding:4px 6px; border-bottom:1px solid rgba(128,128,128,.35); }
+td { padding:3px 6px; border-bottom:1px solid rgba(128,128,128,.16); }
+.sw { display:inline-block; width:14px; height:14px; border-radius:50%; vertical-align:middle; }
+.sw.on { background:#22c55e; box-shadow:0 0 5px #22c55e; }
+.sw.off { background:#9ca3af; }
+.log { height:110px; overflow:auto; background:#0b0e12; color:#3f7; font-family:monospace; font-size:10px; padding:5px; border:2px inset #716f64; }
+.log .warn{color:#fbbf24;} .log .err{color:#f87171;}
+.grid2 { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:6px; }
+.app-tile { border:1px solid rgba(128,128,128,.4); background:var(--surface); padding:6px; display:flex; flex-direction:column; gap:5px; }
+.app-tile .t { font-weight:bold; display:flex; align-items:center; gap:5px; }
+.app-tile .a { display:flex; gap:3px; flex-wrap:wrap; }
+.hint { color:var(--muted); font-size:10px; }
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <span>⚙️ BLISS CONTROL PANEL</span>
+  <span style="display:flex; gap:6px;">
+    <span class="pill" id="p-kernel">KERNEL: —</span>
+    <span class="pill" id="p-win">WINDOWS: 0</span>
+  </span>
+</div>
+
+<div class="body">
+  <div class="nav" id="nav"></div>
+  <div class="pane" id="pane"></div>
+</div>
+
+<script>
+const bus = window.subkernel;
+const K   = window.SubkernelBridge;
+const $   = (id) => document.getElementById(id);
+
+let windows = [];
+let logLines = [];
+
+const SECTIONS = [
+  ['appearance', '🎨 Appearance'],
+  ['panels',     '🪟 Panel Control'],
+  ['apps',       '📦 Applications'],
+  ['runtime',    '🧠 Runtime & AI'],
+  ['system',     '🖥️ System'],
+  ['state',      '💾 State & Data'],
+];
+let section = 'appearance';
+
+function log(msg, cls='') {
+  logLines.unshift({ msg, cls, t: new Date().toLocaleTimeString() });
+  if (logLines.length > 200) logLines.pop();
+  const el = $('cp-log');
+  if (el) el.innerHTML = logLines.map(l => `<div class="${l.cls}">[${l.t}] ${l.msg}</div>`).join('');
+}
+
+bus.on('Shell', 'windows', ({ windows: w }) => {
+  windows = w || [];
+  $('p-win').textContent = `WINDOWS: ${windows.length}`;
+  if (section === 'panels') renderPane();
+});
+
+// ── nav ──────────────────────────────────────────────────────────────
+function renderNav() {
+  $('nav').innerHTML = SECTIONS.map(([id, label]) =>
+    `<div class="${id===section?'on':''}" onclick="go('${id}')">${label}</div>`).join('');
+}
+function go(id) { section = id; renderNav(); renderPane(); }
+
+// ── panes ────────────────────────────────────────────────────────────
+function renderPane() {
+  $('pane').innerHTML = PANES[section]();
+  if (section === 'appearance') syncAppearance();
+  if (section === 'runtime') loadModels();
+  if (section === 'system') loadSystem();
+  const l = $('cp-log');
+  if (l) l.innerHTML = logLines.map(x => `<div class="${x.cls}">[${x.t}] ${x.msg}</div>`).join('');
+}
+
+const THEMES = ['xp', 'dark', 'slate'];
+
+const PANES = {
+
+  // ── APPEARANCE: broadcasts to every surface over the bus ──────────
+  appearance: () => `
+    <div class="card"><h3>Theme <span class="hint">applies live to every open panel</span></h3><div class="in">
+      <div class="row"><label>Theme</label>
+        ${THEMES.map(t => `<button class="btn" id="th-${t}" onclick="setTheme('${t}')">${t.toUpperCase()}</button>`).join('')}
+      </div>
+      <div class="row"><label>Accent colour</label>
+        <input type="color" id="accent" onchange="setAccent(this.value)">
+        <span class="hint" id="accent-val"></span>
+      </div>
+      <div class="row"><label>Font scale</label>
+        <input type="range" id="fscale" min="80" max="130" step="5" oninput="setFontScale(this.value)">
+        <span class="hint" id="fscale-val"></span>
+      </div>
+    </div></div>
+
+    <div class="card"><h3>Desktop</h3><div class="in">
+      <div class="row"><label>Wallpaper</label>
+        ${[0,1,2,3].map(i => `<button class="btn" onclick="setWallpaper(${i})">#${i+1}</button>`).join('')}
+      </div>
+      <div class="row"><label>Custom URL</label>
+        <input type="text" id="wp-url" style="flex:1" placeholder="https://… or asset path">
+        <button class="btn" onclick="setWallpaperUrl()">Apply</button>
+      </div>
+    </div></div>
+    ${logCard()}`,
+
+  // ── PANEL CONTROL: real authority over every window ───────────────
+  panels: () => `
+    <div class="card"><h3>Live Panels <span class="hint">${windows.length} open</span></h3><div class="in">
+      <div class="row">
+        <button class="btn" onclick="bus.emit('Shell','tile-all',{})">▦ Tile All</button>
+        <button class="btn" onclick="openEvery()">⊞ Open All</button>
+        <button class="btn danger" onclick="bus.emit('Shell','close-all',{})">✖ Close All</button>
+        <button class="btn" onclick="bus.emit('Shell','windows-request',{})">🔄 Rescan</button>
+      </div>
+      <table>
+        <thead><tr><th>Panel</th><th>State</th><th>Bound File</th><th style="width:210px">Control</th></tr></thead>
+        <tbody>
+        ${windows.length ? windows.map(w => `
+          <tr>
+            <td><b>${w.title}</b> <span class="hint">${w.id}</span></td>
+            <td>${w.focused ? 'foreground' : w.visible ? 'running' : 'minimized'}</td>
+            <td class="hint">${w.file ? String(w.file).split(/[\\\\/]/).pop() : '—'}</td>
+            <td>
+              <button class="btn mini" onclick="bus.emit('Shell','focus-app',{app:'${w.id}'})">Show</button>
+              <button class="btn mini" onclick="bus.emit('Shell','minimize-app',{app:'${w.id}'})">Min</button>
+              <button class="btn mini" onclick="bus.emit('Shell','maximize-app',{app:'${w.id}'})">Max</button>
+              <button class="btn mini" onclick="bus.emit('Shell','dock-app',{app:'${w.id}',side:'left'})">◧</button>
+              <button class="btn mini" onclick="bus.emit('Shell','dock-app',{app:'${w.id}',side:'right'})">◨</button>
+              <button class="btn mini danger" onclick="bus.emit('Shell','close-app',{app:'${w.id}'})">✕</button>
+            </td>
+          </tr>`).join('')
+          : '<tr><td colspan="4" style="padding:14px; text-align:center; opacity:.6">No panels open.</td></tr>'}
+        </tbody>
+      </table>
+    </div></div>
+
+    <div class="card"><h3>Broadcast a Command <span class="hint">drive any panel directly</span></h3><div class="in">
+      <div class="row">
+        <label>Target</label>
+        <select id="bc-app">${['System','Shell','Explorer','Terminal','Floret','Diagrammer','Notepad','Logos','Gallery']
+          .map(a=>`<option>${a}</option>`).join('')}</select>
+        <input type="text" id="bc-action" placeholder="action" style="width:130px">
+        <input type="text" id="bc-payload" placeholder='{"key":"value"}' style="flex:1">
+        <button class="btn" onclick="broadcast()">Send</button>
+      </div>
+      <div class="hint">Every frame is visible in Task Manager → Bus Traffic.</div>
+    </div></div>
+    ${logCard()}`,
+
+  // ── APPLICATIONS ──────────────────────────────────────────────────
+  apps: () => `
+    <div class="card"><h3>Registered Applications <span class="hint">${Object.keys(K.APPS).length} in registry</span></h3><div class="in">
+      <div class="grid2">
+      ${Object.entries(K.APPS).map(([id, a]) => {
+        const open = windows.some(w => w.id === id);
+        return `<div class="app-tile">
+          <div class="t">${a.icon} ${a.title} <span class="sw ${open?'on':'off'}"></span></div>
+          <div class="hint">${a.uri}</div>
+          <div class="a">
+            <button class="btn mini" onclick="K.openApp('${id}')">Open</button>
+            <button class="btn mini" onclick="bus.emit('Shell','focus-app',{app:'${id}'})">Focus</button>
+            <button class="btn mini danger" onclick="bus.emit('Shell','close-app',{app:'${id}'})">Close</button>
+          </div>
+        </div>`;
+      }).join('')}
+      </div>
+    </div></div>
+
+    <div class="card"><h3>File Associations</h3><div class="in">
+      <table>
+        <thead><tr><th style="width:150px">Handler</th><th>Extensions</th></tr></thead>
+        <tbody>${Object.entries(K.ASSOCIATIONS).map(([app, exts]) =>
+          `<tr><td><b>${K.APPS[app]?.title || app}</b></td><td class="hint">${exts.join(', ')}</td></tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="hint">Explorer, Hub and the shell all resolve file types through this one table.</div>
+    </div></div>
+    ${logCard()}`,
+
+  // ── RUNTIME & AI ──────────────────────────────────────────────────
+  runtime: () => `
+    <div class="card"><h3>Ollama Runtime</h3><div class="in">
+      <div class="row"><label>Status</label><span id="ol-status" class="hint">checking…</span>
+        <button class="btn mini" onclick="loadModels()">Recheck</button></div>
+      <div class="row"><label>Default model</label>
+        <select id="ol-model" style="min-width:220px" onchange="setModel(this.value)"><option>—</option></select>
+      </div>
+      <div class="row"><label>Test prompt</label>
+        <input type="text" id="ol-prompt" style="flex:1" value="Reply with one word: online">
+        <button class="btn" onclick="testModel()">Run</button>
+      </div>
+      <div class="row"><span class="hint" id="ol-out"></span></div>
+    </div></div>
+
+    <div class="card"><h3>Python Runtime</h3><div class="in">
+      <div class="row">
+        <button class="btn" onclick="testPython()">Probe Interpreter</button>
+        <span class="hint" id="py-out">not probed</span>
+      </div>
+    </div></div>
+
+    <div class="card"><h3>MCP Daemon <span class="hint">openrouter-mcp-multimodal</span></h3><div class="in">
+      <div class="row"><label>Status</label><span id="mcp-status" class="hint">STANDBY</span>
+        <button class="btn mini" id="mcp-toggle" onclick="toggleMCPDaemon()">Connect Daemon</button></div>
+      <div class="row"><label>Transport</label><span class="hint">stdio (node child)</span></div>
+      <div class="row"><label>Models</label><button class="btn mini" id="mcp-models" onclick="queryMCPModels()" disabled>Refresh</button></div>
+      <div class="row"><span class="hint" id="mcp-out"></span></div>
+    </div></div>
+    ${logCard()}`,
+
+  // ── SYSTEM ────────────────────────────────────────────────────────
+  system: () => `
+    <div class="card"><h3>Host</h3><div class="in">
+      <table><tbody id="sys-table"><tr><td class="hint">reading…</td></tr></tbody></table>
+      <div class="row"><button class="btn mini" onclick="loadSystem()">Refresh</button></div>
+    </div></div>
+
+    <div class="card"><h3>Shell Command</h3><div class="in">
+      <div class="row">
+        <input type="text" id="sh-cmd" style="flex:1" value="ver" placeholder="command">
+        <button class="btn" onclick="runShell()">Execute</button>
+      </div>
+      <div class="log" id="sh-out" style="height:120px"></div>
+    </div></div>
+    ${logCard()}`,
+
+  // ── STATE ─────────────────────────────────────────────────────────
+  state: () => `
+    <div class="card"><h3>Shared Subkernel State <span class="hint">synced across all panels</span></h3><div class="in">
+      <table><thead><tr><th style="width:170px">Key</th><th>Value</th><th style="width:60px"></th></tr></thead>
+      <tbody>${Object.entries(bus.state).map(([k,v]) => `
+        <tr><td><b>${k}</b></td>
+            <td class="hint" style="word-break:break-all">${String(JSON.stringify(v)).slice(0,150)}</td>
+            <td><button class="btn mini danger" onclick="dropKey('${k}')">Del</button></td></tr>`).join('')
+        || '<tr><td colspan="3" class="hint" style="padding:12px">State is empty.</td></tr>'}
+      </tbody></table>
+      <div class="row">
+        <input type="text" id="sk-key" placeholder="key" style="width:150px">
+        <input type="text" id="sk-val" placeholder="value" style="flex:1">
+        <button class="btn" onclick="setKey()">Set &amp; Broadcast</button>
+      </div>
+    </div></div>
+
+    <div class="card"><h3>Maintenance</h3><div class="in">
+      <div class="row">
+        <button class="btn" onclick="exportState()">⬇ Export Config</button>
+        <button class="btn danger" onclick="resetAll()">↺ Reset Subkernel State</button>
+        <button class="btn danger" onclick="bus.emit('System','reload-all',{})">🔄 Reload All Panels</button>
+      </div>
+      <div class="hint">Reset clears themes, paths and window memory, then reloads every surface.</div>
+    </div></div>
+    ${logCard()}`,
+};
+
+const logCard = () => `<div class="card"><h3>Control Log</h3><div class="in" style="padding:5px">
+  <div class="log" id="cp-log"></div></div></div>`;
+
+// ── appearance actions ───────────────────────────────────────────────
+function setTheme(t) {
+  bus.setState('theme', t);
+  bus.emit('System', 'theme-change', { theme: t });
+  syncAppearance();
+  log(`theme → ${t}`);
+}
+function setAccent(c) {
+  bus.setState('accent', c);
+  bus.emit('System', 'accent-change', { color: c });
+  $('accent-val').textContent = c;
+  log(`accent → ${c}`);
+}
+function setFontScale(v) {
+  bus.setState('fontScale', +v);
+  bus.emit('System', 'font-scale', { scale: +v });
+  $('fscale-val').textContent = `${v}%`;
+}
+function setWallpaper(i) { bus.emit('Shell', 'wallpaper', { index: i }); log(`wallpaper → #${i+1}`); }
+function setWallpaperUrl() {
+  const url = $('wp-url').value.trim();
+  if (!url) return;
+  bus.emit('Shell', 'wallpaper', { url });
+  log('wallpaper → custom url');
+}
+function syncAppearance() {
+  const t = bus.getState('theme', 'xp');
+  THEMES.forEach(x => $(`th-${x}`)?.classList.toggle('on', x === t));
+  const a = bus.getState('accent', '#0055ea');
+  if ($('accent')) { $('accent').value = a; $('accent-val').textContent = a; }
+  const f = bus.getState('fontScale', 100);
+  if ($('fscale')) { $('fscale').value = f; $('fscale-val').textContent = `${f}%`; }
+}
+
+// ── panel actions ────────────────────────────────────────────────────
+function openEvery() { Object.keys(K.APPS).forEach(id => K.openApp(id)); log('opened every registered app'); }
+function broadcast() {
+  let payload = {};
+  const raw = $('bc-payload').value.trim();
+  if (raw) { try { payload = JSON.parse(raw); } catch { return log('payload is not valid JSON', 'err'); } }
+  const app = $('bc-app').value, action = $('bc-action').value.trim();
+  if (!action) return log('action required', 'warn');
+  bus.emit(app, action, payload);
+  log(`broadcast ${app}:${action}`);
+}
+
+// ── runtime actions ──────────────────────────────────────────────────
+async function loadModels() {
+  const st = $('ol-status'), sel = $('ol-model');
+  if (!K.hasKernel) { if (st) st.textContent = 'kernel offline'; return; }
+  try {
+    const models = await K.invoke('list_ollama_models');
+    if (st) st.textContent = `online — ${models.length} models`;
+    if (sel) {
+      const cur = bus.getState('model', models[0]);
+      sel.innerHTML = models.map(m => `<option ${m===cur?'selected':''}>${m}</option>`).join('')
+        || '<option>none installed</option>';
+    }
+    log(`ollama: ${models.length} models`);
+  } catch (e) {
+    if (st) st.textContent = 'offline (is ollama running?)';
+    log(`ollama unreachable: ${e}`, 'warn');
+  }
+}
+function setModel(m) { bus.setState('model', m); log(`default model → ${m}`); }
+
+async function testModel() {
+  const out = $('ol-out'); out.textContent = 'querying…';
+  try {
+    const r = await K.invoke('query_ollama', { model: $('ol-model').value, prompt: $('ol-prompt').value });
+    out.textContent = String(r).trim().slice(0, 220);
+    log('model responded');
+  } catch (e) { out.textContent = String(e); log(`model query failed: ${e}`, 'err'); }
+}
+
+async function testPython() {
+  const out = $('py-out'); out.textContent = 'probing…';
+  try {
+    const r = await K.invoke('run_python', { payload: { code: 'import sys;print(sys.version.split()[0], sys.executable)' } });
+    out.textContent = `${r.stdout.trim()} (exit ${r.exit_code})`;
+    log(`python: ${r.python_used}`);
+  } catch (e) { out.textContent = String(e); log(`python probe failed: ${e}`, 'err'); }
+}
+
+// ── system ───────────────────────────────────────────────────────────
+async function loadSystem() {
+  const tb = $('sys-table');
+  if (!tb) return;
+  if (!K.hasKernel) { tb.innerHTML = '<tr><td class="hint">Native kernel not attached.</td></tr>'; return; }
+  try {
+    const s = await K.invoke('system_stats');
+    const gb = (kb) => (kb / 1048576).toFixed(2);
+    tb.innerHTML = [
+      ['Hostname', s.hostname], ['OS', s.os],
+      ['Total RAM', `${gb(s.total_mem_kb)} GB`],
+      ['Free RAM', `${gb(s.free_mem_kb)} GB`],
+      ['Host processes', s.proc_count],
+      ['Bus origin', bus.origin],
+    ].map(([k,v]) => `<tr><td style="width:150px"><b>${k}</b></td><td class="hint">${v}</td></tr>`).join('');
+  } catch (e) { tb.innerHTML = `<tr><td class="hint">${e}</td></tr>`; }
+}
+
+async function runShell() {
+  const out = $('sh-out'), cmd = $('sh-cmd').value.trim();
+  if (!cmd) return;
+  out.innerHTML = `<div>$ ${cmd}</div>`;
+  try {
+    const r = await K.invoke('execute_shell_command', { cmd });
+    out.innerHTML += `<div>${(r || '(no output)').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>`;
+  } catch (e) {
+    out.innerHTML += `<div class="err">${String(e).replace(/</g,'&lt;')}</div>`;
+  }
+}
+
+// ── state ────────────────────────────────────────────────────────────
+function setKey() {
+  const k = $('sk-key').value.trim();
+  if (!k) return;
+  let v = $('sk-val').value;
+  try { v = JSON.parse(v); } catch {}
+  bus.setState(k, v);
+  log(`state ${k} set`);
+  renderPane();
+}
+function dropKey(k) { delete bus.state[k]; bus._saveState(); bus.emit('System','state-change',{key:k,value:null}); renderPane(); log(`state ${k} removed`, 'warn'); }
+function exportState() {
+  const blob = new Blob([JSON.stringify({ exported: new Date().toISOString(), apps: K.APPS, state: bus.state }, null, 2)], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'bliss26_subkernel_config.json';
+  a.click();
+  log('config exported');
+}
+function resetAll() {
+  if (!confirm('Reset all subkernel state and reload every panel?')) return;
+  localStorage.removeItem('bliss26_state');
+  bus.state = {};
+  bus.emit('System', 'reload-all', {});
+  setTimeout(() => location.reload(), 250);
+}
+
+// ── MCP daemon (Bliss-OS surface: spawn node child, JSON-RPC over stdio) ──
+const MCP_SERVER_PATH = 'C:\\Dev\\ollama-harness\\mcp-servers\\openrouter-mcp-multimodal\\index.js';
+let mcpProcess = null, mcpReady = false, mcpReqId = 0, mcpPending = new Map();
+function mcpLog(m) { const o = $('mcp-out'); if (o) o.textContent = m; log(`mcp: ${m}`); }
+async function toggleMCPDaemon() {
+  const status = $('mcp-status'), btn = $('mcp-toggle'), modelsBtn = $('mcp-models');
+  if (mcpProcess) { await killMCP(); status.textContent='STANDBY'; status.className='hint'; btn.textContent='Connect Daemon'; modelsBtn.disabled=true; mcpLog('terminated'); return; }
+  if (!K.hasKernel) { mcpLog('kernel offline — needs native runtime'); status.textContent='NO HOST'; status.className='hint'; return; }
+  try {
+    const { Command } = window.__TAURI__.shell;
+    mcpProcess = new Command('node', [MCP_SERVER_PATH], {});
+    mcpProcess.stdout.on('data', handleMCPStdout);
+    mcpProcess.stderr.on('data', d => mcpLog(`stderr: ${d}`));
+    mcpProcess.on('close', () => { mcpProcess=null; mcpReady=false; status.textContent='STANDBY'; status.className='hint'; btn.textContent='Connect Daemon'; modelsBtn.disabled=true; mcpLog('exited'); });
+    await mcpProcess.spawn();
+    mcpLog(`spawned ${MCP_SERVER_PATH}`);
+    setTimeout(() => sendMCPRequest('initialize', { protocolVersion:'2024-11-05', capabilities:{}, clientInfo:{name:'bliss-os',version:'0.1.0'} }), 500);
+    status.textContent='BOOTING'; status.className='hint'; btn.textContent='Disconnect';
+  } catch (e) { mcpLog(`ERR: ${e.message||e}`); status.textContent='FAILED'; status.className='hint'; }
+}
+async function killMCP() { if (!mcpProcess) return; try { await mcpProcess.kill(); } catch {} mcpProcess=null; mcpReady=false; }
+function sendMCPRequest(method, params={}) {
+  if (!mcpProcess) return;
+  const id = ++mcpReqId;
+  mcpPending.set(id, method);
+  mcpProcess.write(JSON.stringify({ jsonrpc:'2.0', id, method, params }) + '\n');
+}
+function handleMCPStdout(line) {
+  const chunks = String(line).split('\n');
+  for (const c of chunks) {
+    if (!c.trim()) continue;
+    try {
+      const msg = JSON.parse(c);
+      if (msg.id && mcpPending.has(msg.id)) {
+        const method = mcpPending.get(msg.id); mcpPending.delete(msg.id);
+        if (method === 'initialize') { mcpReady=true; $('mcp-status').textContent='ONLINE'; $('mcp-models').disabled=false; mcpLog('handshake ok'); }
+        else if (method === 'tools/list') { mcpLog(`tools: ${msg.result?.tools?.length||0}`); }
+      }
+    } catch (e) { /* non-JSON heartbeat */ }
+  }
+}
+async function queryMCPModels() {
+  if (!mcpReady) return mcpLog('not ready');
+  sendMCPRequest('tools/list', {});
+}
+
+// ── boot ─────────────────────────────────────────────────────────────
+$('p-kernel').textContent = `KERNEL: ${K.hasKernel ? 'ATTACHED' : 'OFFLINE'}`;
+renderNav(); renderPane();
+bus.emit('Shell', 'windows-request', {});
+setInterval(() => bus.emit('Shell', 'windows-request', {}), 3000);
+log('Control Panel bound to subkernel bus.');
+</script>
+</body>
+</html>

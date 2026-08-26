@@ -1,0 +1,637 @@
+successfully downloaded text file (SHA: d7b1f40f7db2f015f963557029c5a7175c294e9f)
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../subkernel-bus.js"></script>
+<script src="../subkernel-bridge.js"></script>
+<meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Floret Spatial Navigator - XP & Dark Mode Matrix</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #060a10;
+      --card-bg: rgba(15, 23, 42, 0.88);
+      --card-border: rgba(255, 255, 255, 0.12);
+      --text-color: #cbd5e1;
+      --dot-color: rgba(56, 189, 248, 0.18);
+      --bar-bg: #1e293b;
+      --bar-border: #334155;
+    }
+
+    body.xp-mode {
+      --bg-color: #ece9d8;
+      --card-bg: rgba(241, 239, 226, 0.95);
+      --card-border: #004eae;
+      --text-color: #000000;
+      --dot-color: rgba(0, 78, 174, 0.12);
+      --bar-bg: #f1efe2;
+      --bar-border: #aca899;
+    }
+
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--bg-color);
+      color: var(--text-color);
+      overflow: hidden;
+      touch-action: none;
+      margin: 0;
+      transition: background 0.3s ease;
+    }
+
+    .glass-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border);
+    }
+
+    .dot-grid {
+      background-image: radial-gradient(var(--dot-color) 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+
+    .node-card {
+      transition: transform 0.15s ease, box-shadow 0.2s ease;
+    }
+    .node-card:active {
+      transform: scale(0.98);
+    }
+
+    .node-expand-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 3px;
+      font-size: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .node-expand-btn:hover {
+      background: rgba(56, 189, 248, 0.3);
+    }
+
+    /* XP Top Menu */
+    .xp-menubar {
+      display: flex;
+      background: var(--bar-bg);
+      border-bottom: 1px solid var(--bar-border);
+      padding: 3px 8px;
+      gap: 4px;
+      font-size: 11px;
+    }
+    .menu-item {
+      padding: 2px 6px;
+      cursor: pointer;
+      border-radius: 2px;
+      position: relative;
+    }
+    .menu-item:hover {
+      background: #316ac5;
+      color: #fff;
+    }
+    .dropdown {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      background: #fff;
+      color: #000;
+      border: 1px solid #7f9db9;
+      box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+      min-width: 160px;
+      z-index: 100;
+      padding: 2px;
+    }
+    .menu-item:hover .dropdown { display: block; }
+    .dropdown-item {
+      padding: 4px 10px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+    }
+    .dropdown-item:hover { background: #316ac5; color: #fff; }
+    .dropdown-divider { height: 1px; background: #aca899; margin: 2px 0; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    const getMediaType = (filename) => {
+      const ext = filename.split('.').pop().toLowerCase();
+      if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp'].includes(ext)) return 'image';
+      if (['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac'].includes(ext)) return 'audio';
+      if (['mp4', 'webm', 'mkv'].includes(ext)) return 'video';
+      if (['txt', 'md', 'js', 'ts', 'go', 'rs', 'json', 'py', 'c', 'cpp', 'h', 'css', 'html', 'htm', 'xhtml', 'toml'].includes(ext)) return 'text';
+      if (['exe', 'dll', 'so', 'safetensors', 'bin', 'gguf'].includes(ext)) return 'binary';
+      return 'unknown';
+    };
+
+    const getFileIcon = (name) => {
+      const ext = name.split('.').pop().toLowerCase();
+      if (['mp3','flac','wav','ogg','m4a','aac'].includes(ext)) return '🎵';
+      if (['jpg','jpeg','png','gif','webp','svg','bmp'].includes(ext)) return '🖼️';
+      if (['html','htm','xhtml'].includes(ext)) return '🌐';
+      if (['txt','md','json','js','rs','toml','css','py','ts','go','c','cpp','h'].includes(ext)) return '📝';
+      return '📄';
+    };
+
+    const getDepthColor = (depth, isXp) => {
+      if (isXp) return `hsl(${(depth * 50 + 200) % 360}, 70%, 35%)`;
+      return `hsl(${(depth * 65) % 360}, 80%, 65%)`;
+    };
+
+    const readDirectory = async (pathVal) => {
+      const tauri = window.__TAURI__ || (window.parent && window.parent.__TAURI__);
+      if (tauri && tauri.core && tauri.core.invoke) {
+        try {
+          return await tauri.core.invoke('read_directory', { path: pathVal });
+        } catch(e) { console.warn('[Floret] Tauri read failed:', e); }
+      }
+
+      try {
+        const res = await fetch('http://127.0.0.1:8989/rpc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            method: "fs_read_dir",
+            params: { path: pathVal },
+            id: Date.now()
+          })
+        });
+        const data = await res.json();
+        if (data.result) return data.result;
+      } catch(e) { console.warn('[Floret] JSON-RPC fallback failed:', e); }
+
+      return [
+        { name: 'HERETIC-GO', is_dir: true },
+        { name: 'bliss26-subkernel', is_dir: true },
+        { name: 'chorus_engine', is_dir: true },
+        { name: 'audio_archive', is_dir: true },
+        { name: 'workspace_manifest.json', is_dir: false }
+      ];
+    };
+
+    function FloretApp() {
+      const [themeMode, setThemeMode] = useState('dark'); // 'dark' | 'xp'
+      const [graph, setGraph] = useState({
+        id: 'root',
+        name: 'C:\\Dev',
+        path: 'C:\\Dev',
+        depth: 0,
+        x: 80, y: 280,
+        expanded: false,
+        items: [],
+        children: [],
+        isLoading: false
+      });
+
+      const [hoveredNode, setHoveredNode] = useState(null);
+      const [activeMedia, setActiveMedia] = useState(null);
+      const [zoom, setZoom] = useState(1);
+      const [pan, setPan] = useState({ x: 40, y: 20 });
+      const [draggingNode, setDraggingNode] = useState(null);
+      const [rootPath, setRootPath] = useState('C:\\Dev');
+      const [dimensions, setDimensions] = useState({ w: window.innerWidth, h: window.innerHeight });
+
+      const canvasRef = useRef(null);
+      const isPanning = useRef(false);
+      const panStart = useRef({ x: 0, y: 0 });
+
+      useEffect(() => {
+        document.body.className = themeMode === 'xp' ? 'xp-mode' : '';
+      }, [themeMode]);
+
+      useEffect(() => {
+        const onResize = () => setDimensions({ w: window.innerWidth, h: window.innerHeight });
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+      }, []);
+
+      const flattenNodes = useCallback((node, acc = []) => {
+        acc.push(node);
+        if (node.expanded && node.children) {
+          node.children.forEach(child => flattenNodes(child, acc));
+        }
+        return acc;
+      }, []);
+
+      const visibleNodes = flattenNodes(graph);
+
+      // Canvas bezier render
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(pan.x, pan.y);
+        ctx.scale(zoom, zoom);
+
+        const drawStrands = (parent) => {
+          if (!parent.expanded || !parent.children || parent.children.length === 0) return;
+          parent.children.forEach(child => {
+            const startX = parent.x + 176;
+            const startY = parent.y + 24;
+            const endX = child.x;
+            const endY = child.y + 24;
+            const midX = (startX + endX) / 2;
+
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            ctx.bezierCurveTo(midX, startY, midX, endY, endX, endY);
+            ctx.strokeStyle = getDepthColor(child.depth, themeMode === 'xp');
+            ctx.lineWidth = 2.2 / zoom;
+            ctx.globalAlpha = 0.75;
+            ctx.stroke();
+
+            drawStrands(child);
+          });
+        };
+
+        drawStrands(graph);
+        ctx.restore();
+      }, [graph, pan, zoom, dimensions, themeMode]);
+
+      // Expand node & handle dynamic panning shift (L7/L8 shift)
+      const expandNode = async (node) => {
+        if (node.isLoading) return;
+
+        const updateLoading = (n, id, loading) => {
+          if (n.id === id) return { ...n, isLoading: loading };
+          if (n.children) return { ...n, children: n.children.map(c => updateLoading(c, id, loading)) };
+          return n;
+        };
+
+        setGraph(g => updateLoading(g, node.id, true));
+
+        const subItems = await readDirectory(node.path);
+        const subDirs = subItems.filter(i => i.is_dir || i.isDir);
+
+        const childNodes = subDirs.map((dir, idx) => {
+          const totalHeight = subDirs.length * 68;
+          const offsetY = (idx * 68) - (totalHeight / 2);
+          return {
+            id: `${node.path}\\${dir.name}`,
+            name: dir.name,
+            path: `${node.path}\\${dir.name}`,
+            depth: node.depth + 1,
+            x: node.x + 230,
+            y: node.y + offsetY,
+            expanded: false,
+            isLoading: false,
+            items: subItems.filter(i => (i.path || '').includes(dir.name)),
+            children: []
+          };
+        });
+
+        const updateGraph = (n) => {
+          if (n.id === node.id) {
+            return { ...n, expanded: true, items: subItems, children: childNodes, isLoading: false };
+          }
+          if (n.children) {
+            return { ...n, children: n.children.map(updateGraph) };
+          }
+          return n;
+        };
+
+        setGraph(updateGraph(graph));
+
+        // Shift viewport left when nesting reaches deep topology (e.g. Depth >= 3 or node exceeds right edge)
+        const targetX = node.x + 230;
+        const projectedRight = (targetX + 200) * zoom + pan.x;
+        if (projectedRight > window.innerWidth - 100 || node.depth >= 3) {
+          const shiftX = Math.min(pan.x - 220 * zoom, window.innerWidth - (targetX + 250) * zoom);
+          setPan(p => ({ ...p, x: shiftX }));
+        }
+      };
+
+      // Collapse node recursively (unmounts active child branches cleanly)
+      const collapseNode = (node) => {
+        const updateGraph = (n) => {
+          if (n.id === node.id) {
+            return { ...n, expanded: false };
+          }
+          if (n.children) {
+            return { ...n, children: n.children.map(updateGraph) };
+          }
+          return n;
+        };
+        setGraph(updateGraph(graph));
+      };
+
+      const toggleNode = (node) => {
+        if (node.expanded) {
+          collapseNode(node);
+        } else {
+          expandNode(node);
+        }
+      };
+
+      const handlePointerMove = (e) => {
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+        if (draggingNode) {
+          const dx = (clientX - draggingNode.startX) / zoom;
+          const dy = (clientY - draggingNode.startY) / zoom;
+
+          const updatePos = (n) => {
+            if (n.id === draggingNode.id) {
+              return { ...n, x: draggingNode.nodeX + dx, y: draggingNode.nodeY + dy };
+            }
+            if (n.children) {
+              return { ...n, children: n.children.map(updatePos) };
+            }
+            return n;
+          };
+          setGraph(updatePos(graph));
+        } else if (isPanning.current) {
+          setPan({
+            x: clientX - panStart.current.x,
+            y: clientY - panStart.current.y
+          });
+        }
+      };
+
+      // ── Subkernel bus: Floret is addressable from Explorer / Hub ──
+      useEffect(() => {
+        const bus = window.subkernel;
+        if (!bus) return;
+        const mapTo = async (path) => {
+          if (!path) return;
+          setRootPath(path);
+          const contents = await readDirectory(path);
+          setGraph({
+            id: 'root',
+            name: String(path).split(/[\\/]/).filter(Boolean).pop() || path,
+            path,
+            x: 0, y: 0,
+            expanded: true,
+            isLoading: false,
+            items: contents,
+            children: []
+          });
+          bus.emit('Floret', 'mapped', { path, count: contents.length });
+        };
+        const offs = [
+          bus.on('Floret', 'map-path', ({ path }) => mapTo(path)),
+          bus.on('mindmap', 'open-file', ({ path }) => mapTo(path)),
+          bus.on('Floret', 'query', () =>
+            bus.emit('Floret', 'query:reply', { path: rootPath, nodes: flattenNodes(graph).length })),
+          bus.on('Explorer', 'fs-changed', () => mapTo(rootPath)),
+          bus.on('System', 'theme-change', ({ theme }) =>
+            setThemeMode(theme === 'xp' ? 'xp' : 'dark')),
+        ];
+        return () => offs.forEach(f => f && f());
+      }, [rootPath, graph]);
+
+      const handlePathChange = async () => {
+        const contents = await readDirectory(rootPath);
+        setGraph({
+          id: 'root',
+          name: rootPath.split('\\').pop() || rootPath,
+          path: rootPath,
+          depth: 0,
+          x: 80, y: 280,
+          expanded: false,
+          isLoading: false,
+          items: contents,
+          children: []
+        });
+      };
+
+      useEffect(() => {
+        (async () => {
+          const contents = await readDirectory(graph.path);
+          setGraph(g => ({ ...g, items: contents }));
+        })();
+      }, []);
+
+      return (
+        <div 
+          className="relative w-screen h-screen dot-grid select-none overflow-hidden"
+          onMouseDown={(e) => { isPanning.current = true; panStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y }; }}
+          onTouchStart={(e) => { isPanning.current = true; panStart.current = { x: e.touches[0].clientX - pan.x, y: e.touches[0].clientY - pan.y }; }}
+          onMouseMove={handlePointerMove}
+          onTouchMove={handlePointerMove}
+          onMouseUp={() => { setDraggingNode(null); isPanning.current = false; }}
+          onTouchEnd={() => { setDraggingNode(null); isPanning.current = false; }}
+        >
+          {/* Windows XP / Dark Mode Navigation Header */}
+          <div className="xp-menubar relative z-50">
+            <div className="menu-item">
+              File
+              <div className="dropdown">
+                <div className="dropdown-item" onClick={handlePathChange}>Reload Root Path</div>
+                <div className="dropdown-divider"></div>
+                <div className="dropdown-item" onClick={() => window.parent.postMessage({kernelAction:'CLOSE_WINDOW'}, '*')}>Exit</div>
+              </div>
+            </div>
+            <div className="menu-item">
+              View Mode
+              <div className="dropdown">
+                <div className="dropdown-item" onClick={() => setThemeMode('dark')}>🌙 Obsidian Dark</div>
+                <div className="dropdown-item" onClick={() => setThemeMode('xp')}>🪟 Windows XP Bliss</div>
+              </div>
+            </div>
+            <div className="menu-item">
+              Topology
+              <div className="dropdown">
+                <div className="dropdown-item" onClick={() => setPan({ x: 40, y: 20 })}>Recenter Graph</div>
+                <div className="dropdown-item" onClick={() => setZoom(1)}>Reset Zoom (100%)</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Subheader Toolbar Controls */}
+          <div className="absolute top-10 left-3 right-3 z-40 flex items-center justify-between glass-card px-4 py-2 rounded-xl text-xs">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <span className="text-pink-500 font-bold tracking-widest flex items-center gap-1 shrink-0">
+                🌸 FLORET
+              </span>
+              <span className="opacity-40">|</span>
+              <input 
+                type="text" 
+                value={rootPath} 
+                onChange={(e) => setRootPath(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handlePathChange()}
+                className="bg-black/20 border border-slate-600/50 rounded px-2 py-1 text-xs font-mono flex-1 min-w-0 outline-none focus:border-cyan-500"
+              />
+              <button 
+                onClick={handlePathChange}
+                className="px-3 py-1 bg-cyan-800/40 hover:bg-cyan-700/60 border border-cyan-600/50 rounded text-xs shrink-0"
+              >
+                Go
+              </button>
+            </div>
+            <div className="flex items-center gap-2 ml-4 shrink-0">
+              <button onClick={() => setZoom(z => Math.min(2.5, z + 0.15))} className="px-2 py-0.5 bg-slate-700/40 hover:bg-slate-600/50 rounded">＋</button>
+              <button onClick={() => setZoom(z => Math.max(0.3, z - 0.15))} className="px-2 py-0.5 bg-slate-700/40 hover:bg-slate-600/50 rounded">－</button>
+            </div>
+          </div>
+
+          {/* Dynamic Bezier Canvas Line Render */}
+          <canvas 
+            ref={canvasRef} 
+            width={dimensions.w} 
+            height={dimensions.h} 
+            className="absolute inset-0 pointer-events-none z-10"
+          />
+
+          {/* Graph Nodes Viewport */}
+          <div 
+            className="absolute inset-0 z-20 pointer-events-none"
+            style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: '0 0' }}
+          >
+            {visibleNodes.map((node) => {
+              const depthColor = getDepthColor(node.depth, themeMode === 'xp');
+              const isHovered = hoveredNode === node.id;
+              const isExpandable = node.items && node.items.some(i => i.is_dir || i.isDir);
+
+              // Calculate safe dropdown placement (flip left/top if near boundary)
+              const screenPosX = node.x * zoom + pan.x;
+              const screenPosY = node.y * zoom + pan.y;
+              const popLeft = screenPosX > window.innerWidth - 260 ? '-left-56' : 'left-0';
+              const popTop = screenPosY > window.innerHeight - 200 ? 'bottom-full mb-2' : 'top-full mt-2';
+
+              return (
+                <div
+                  key={node.id}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                    setDraggingNode({ id: node.id, startX: clientX, startY: clientY, nodeX: node.x, nodeY: node.y });
+                  }}
+                  onMouseEnter={() => setHoveredNode(node.id)}
+                  onMouseLeave={() => setHoveredNode(null)}
+                  className="absolute pointer-events-auto node-card cursor-grab active:cursor-grabbing rounded-lg glass-card p-3 w-44"
+                  style={{
+                    left: `${node.x}px`,
+                    top: `${node.y}px`,
+                    borderColor: depthColor,
+                    boxShadow: isHovered ? `0 0 16px ${depthColor}` : '0 4px 12px rgba(0,0,0,0.3)',
+                    opacity: node.isLoading ? 0.6 : 1
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-1 mb-2 border-b border-slate-500/30 pb-1">
+                    <span className="text-[11px] font-bold truncate flex-1">
+                      📁 {node.name}
+                    </span>
+                    {isExpandable && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleNode(node);
+                        }}
+                        className="node-expand-btn"
+                        title={node.expanded ? 'Collapse Branch' : 'Expand Branch'}
+                      >
+                        {node.isLoading ? '⟳' : (node.expanded ? '▼' : '▶')}
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="text-[9px] opacity-70 font-mono flex justify-between">
+                    <span>{node.items ? `${node.items.length} items` : 'Scanning...'}</span>
+                    <span>d:{node.depth}</span>
+                  </div>
+
+                  {/* Drop-out Manifest List (Auto-Anchored) */}
+                  {isHovered && node.items && node.items.length > 0 && (
+                    <div className={`absolute ${popTop} ${popLeft} w-56 glass-card rounded-md p-2 text-[9px] z-50 shadow-2xl border border-cyan-500/40 max-h-48 overflow-y-auto`}>
+                      <div className="font-bold mb-1 border-b border-slate-500/30 pb-1 flex justify-between text-pink-400">
+                        <span>Directory Contents</span>
+                        <span>{node.items.length}</span>
+                      </div>
+                      {node.items.map((item, idx) => {
+                        const mType = getMediaType(item.name);
+                        const isDir = item.is_dir || item.isDir;
+                        return (
+                          <div 
+                            key={idx} 
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              if (!isDir) setActiveMedia({ name: item.name, path: `${node.path}\\${item.name}`, type: mType });
+                            }}
+                            className="py-1 px-1 rounded hover:bg-cyan-500/20 flex items-center justify-between cursor-pointer"
+                          >
+                            <span className="truncate max-w-[130px] flex items-center gap-1">
+                              <span>{isDir ? '📁' : getFileIcon(item.name)}</span>
+                              {item.name}
+                            </span>
+                            <span className="text-[8px] px-1 rounded border border-slate-500/40 uppercase font-mono">
+                              {isDir ? 'DIR' : mType}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Media Viewer Modal */}
+          {activeMedia && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-6">
+              <div className="glass-card rounded-xl max-w-2xl w-full p-4 flex flex-col max-h-[85vh] border border-pink-500/40">
+                <div className="flex items-center justify-between border-b border-slate-700 pb-2 mb-3">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-pink-400 font-bold uppercase">[{activeMedia.type}]</span>
+                    <span className="font-mono">{activeMedia.name}</span>
+                  </div>
+                  <button 
+                    onClick={() => setActiveMedia(null)}
+                    className="px-2 py-0.5 bg-rose-800/80 hover:bg-rose-700 text-white text-xs rounded"
+                  >
+                    ✕ ESC
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-auto rounded bg-black/40 p-3 text-xs font-mono">
+                  {activeMedia.type === 'text' && (
+                    <pre className="whitespace-pre-wrap leading-relaxed text-cyan-200">
+                      {`// File Stream: ${activeMedia.path}\n// Synchronized with Chorus/Bliss Subkernel...`}
+                    </pre>
+                  )}
+                  {activeMedia.type !== 'text' && (
+                    <div className="p-4 text-center">
+                      ⚙️ Executable / Media handle active for <span className="text-pink-400">{activeMedia.name}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Diagnostics Footer */}
+          <div className="absolute bottom-3 left-3 right-3 z-40 glass-card px-4 py-1.5 rounded-xl text-[10px] opacity-70 flex justify-between items-center">
+            <span>Toggle ▶/▼ to expand & collapse nodes cleanly • Drag nodes to reposition</span>
+            <span>Zoom: {Math.round(zoom * 100)}%</span>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<FloretApp />);
+  </script>
+</body>
+</html>

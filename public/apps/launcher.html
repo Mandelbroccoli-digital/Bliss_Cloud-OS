@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../subkernel-bus.js"></script>
+<script src="../subkernel-bridge.js"></script>
+<meta charset="UTF-8">
+  <title>Bliss Game Hub</title>
+  <style>
+    body { font-family: 'Tahoma', sans-serif; background: #ece9d8; margin: 10px; }
+    .game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+    .game-card { background: #fff; border: 2px outset #fff; padding: 10px; text-align: center; cursor: pointer; }
+    .game-card:hover { border-style: inset; background: #e0e0e0; }
+  </style>
+</head>
+<body>
+  <h3>🎮 Bliss Arcade</h3>
+  <div class="game-grid">
+    <div class="game-card" onclick="launchGame('snake')">🐍 Snake</div>
+    <div class="game-card" onclick="launchGame('pong')">🏓 Pong</div>
+    <div class="game-card" onclick="launchGame('space-invaders')">👾 Invaders</div>
+  </div>
+
+  <script>
+    function launchGame(gameId) {
+      // Emit launch trigger over the Subkernel Bus to open in a dynamic app frame
+      if (window.parent.subkernel) {
+        window.parent.subkernel.emit('GameHub', 'launch', { game: gameId });
+      }
+    }
+  </script>
+</body>
+</html>

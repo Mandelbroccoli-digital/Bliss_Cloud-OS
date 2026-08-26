@@ -1,97 +1,322 @@
+successfully downloaded text file (SHA: cd94d55f34fa3ec762428da99e1c4e942652678f)
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <style>
-        body, html { margin:0; padding:0; height:100%; background:#0a0c10; color:#c9d1d9; font-family:-apple-system,sans-serif; overflow:hidden; }
-        #app { display:flex; flex-direction:column; height:100%; }
-        .header { background:#161b22; border-bottom:1px solid #30363d; padding:14px 20px; display:flex; align-items:center; gap:12px; }
-        .logo { font-size:28px; }
-        .header h1 { font-size:18px; color:#f0f6fc; }
-        .header .ver { color:#8b949e; font-size:12px; }
-        #content { flex:1; overflow-y:auto; padding:20px; }
-        .card { background:#161b22; border:1px solid #30363d; border-radius:8px; padding:16px; margin-bottom:14px; }
-        .card h3 { color:#f0f6fc; font-size:14px; margin-bottom:8px; }
-        .card p { color:#8b949e; font-size:12px; line-height:1.6; }
-        .stat-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
-        .stat { background:#0d1117; border:1px solid #30363d; border-radius:6px; padding:12px; text-align:center; }
-        .stat .val { font-size:24px; font-weight:bold; color:#3a82f2; }
-        .stat .lbl { font-size:11px; color:#8b949e; margin-top:4px; }
-        .module-list { display:flex; flex-direction:column; gap:8px; }
-        .module { display:flex; align-items:center; gap:10px; padding:8px 12px; background:#0d1117; border-radius:6px; border:1px solid #30363d; }
-        .module .icon { font-size:20px; }
-        .module .name { flex:1; font-size:13px; }
-        .module .status { font-size:11px; padding:2px 8px; border-radius:10px; }
-        .status.online { background:rgba(63,185,80,0.2); color:#3fb950; }
-        .status.standby { background:rgba(255,183,3,0.2); color:#ffb703; }
-        .btn { background:#3a82f2; border:none; color:#fff; padding:6px 14px; border-radius:4px; cursor:pointer; font-size:12px; }
-        .btn:hover { background:#5599ff; }
-    </style>
+<script src="../subkernel-bus.js"></script>
+<script src="../subkernel-bridge.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ouro-Hub</title>
+<style>
+:root { --bg:#ece9d8; --card:#f1efe2; --surface:#fff; --text:#000;
+  --accent-color:#0055ea; --border:#004eae; --muted:#5a6270; --hdr-a:#0058e6; --hdr-b:#3a93ff; }
+[data-theme="dark"] { --bg:#1e222a; --card:#262b34; --surface:#12151a; --text:#d7dce4;
+  --border:#10141a; --muted:#93a0b4; --hdr-a:#1b2a44; --hdr-b:#2c4a7a; }
+[data-theme="slate"] { --bg:#2b303b; --card:#353c4a; --surface:#1e222a; --text:#e2e8f0;
+  --border:#1a1e26; --muted:#94a3b8; --hdr-a:#334155; --hdr-b:#475569; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:"Tahoma","Segoe UI",sans-serif; font-size:11px; background:var(--bg); color:var(--text);
+  height:100vh; display:flex; flex-direction:column; user-select:none; overflow:hidden; }
+.hdr { background:linear-gradient(90deg,var(--hdr-a),var(--hdr-b)); color:#fff; padding:6px 10px;
+  display:flex; justify-content:space-between; align-items:center; font-weight:bold; }
+.pill { background:rgba(0,0,0,.3); padding:1px 7px; border-radius:3px; font-family:monospace; font-weight:normal; font-size:10px; }
+
+.omni { display:flex; gap:5px; padding:7px 8px; background:var(--card); border-bottom:1px solid var(--border); }
+.omni input { flex:1; border:1px solid #7f9db9; padding:4px 7px; font-size:12px; font-family:inherit;
+  background:var(--surface); color:var(--text); }
+.omni input:focus { outline:1px solid var(--accent-color); }
+
+.body { flex:1; display:grid; grid-template-columns: 1fr 236px; min-height:0; }
+.main { overflow-y:auto; padding:9px; display:flex; flex-direction:column; gap:9px; }
+.side { border-left:1px solid var(--border); background:var(--card); overflow-y:auto; padding:8px; display:flex; flex-direction:column; gap:9px; }
+
+.card { background:var(--card); border:1px solid var(--border); }
+.card > h3 { background:rgba(0,0,0,.08); padding:4px 8px; font-size:11px;
+  border-bottom:1px solid rgba(128,128,128,.35); display:flex; justify-content:space-between; align-items:center; }
+.card > .in { padding:8px; }
+.hint { color:var(--muted); font-size:10px; }
+
+.tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:7px; }
+.tile { background:var(--surface); border:1px solid #7f9db9; border-radius:3px; padding:9px 5px;
+  display:flex; flex-direction:column; align-items:center; gap:5px; cursor:pointer; position:relative; transition:all .1s; }
+.tile:hover { background:var(--accent-color); color:#fff; border-color:var(--border); transform:translateY(-1px); }
+.tile:active { transform:scale(.97); }
+.tile .ic { font-size:25px; }
+.tile .nm { font-weight:bold; text-align:center; word-break:break-word; }
+.tile .dot { position:absolute; top:4px; right:4px; width:7px; height:7px; border-radius:50%; background:#22c55e; box-shadow:0 0 5px #22c55e; }
+
+.list { display:flex; flex-direction:column; }
+.item { display:flex; align-items:center; gap:6px; padding:3px 5px; cursor:pointer; border-radius:2px; }
+.item:hover { background:rgba(0,85,234,.14); }
+.item .g { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.item .x { opacity:.5; font-size:9px; }
+.item:hover .x { opacity:1; }
+
+.btn { background:linear-gradient(180deg,#fff,#e3e0d0); border:1px solid #7f9db9; padding:3px 9px;
+  cursor:pointer; border-radius:2px; font-size:11px; font-family:inherit; color:#000; }
+.btn:hover { background:linear-gradient(180deg,#eaf2ff,#b5d3ff); border-color:#3c7fb1; }
+.btn.mini { padding:1px 6px; font-size:9px; }
+.btn.danger { color:#9b1c1c; border-color:#c05252; background:linear-gradient(180deg,#fff5f5,#ffdada); }
+
+.stat { display:flex; justify-content:space-between; padding:2px 0; }
+.stat b { font-family:monospace; }
+.meter { height:6px; background:rgba(0,0,0,.16); border-radius:3px; overflow:hidden; margin-top:2px; }
+.meter > i { display:block; height:100%; background:linear-gradient(90deg,#34d399,#059669); }
+
+#results { display:none; }
+.res { padding:4px 6px; cursor:pointer; display:flex; gap:7px; align-items:center; }
+.res:hover, .res.on { background:var(--accent-color); color:#fff; }
+.res .k { font-size:9px; opacity:.7; margin-left:auto; }
+.ai-out { background:var(--surface); border:1px solid rgba(128,128,128,.35); padding:6px;
+  min-height:52px; max-height:150px; overflow:auto; font-family:monospace; font-size:10px; white-space:pre-wrap; }
+</style>
 </head>
 <body>
-<div id="app">
-    <div class="header">
-        <span class="logo">🌀</span>
-        <div>
-            <h1>Ouro-Hub <span class="ver">v0.0.9</span></h1>
-            <div class="ver">Central module registry & kernel dashboard</div>
-        </div>
-    </div>
-    <div id="content">
-        <div class="card">
-            <h3>Kernel Status</h3>
-            <div class="stat-grid">
-                <div class="stat"><div class="val" id="uptime">0s</div><div class="lbl">UPTIME</div></div>
-                <div class="stat"><div class="val">14</div><div class="lbl">LOADED MODULES</div></div>
-                <div class="stat"><div class="val">2.2B</div><div class="lbl">MALI RUNTIME</div></div>
-                <div class="stat"><div class="val" id="mem">—</div><div class="lbl">MEMORY (MB)</div></div>
-            </div>
-        </div>
-        <div class="card">
-            <h3>Active Modules</h3>
-            <div class="module-list" id="modules"></div>
-        </div>
-        <div class="card">
-            <h3>Quick Actions</h3>
-            <p style="margin-bottom:10px;">Launch or manage Bliss OS subsystems from here.</p>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                <button class="btn" onclick="window.parent.postMessage({kernelAction:'LAUNCH_WITH_FILE',targetApp:'terminal'},'*')">Open Terminal</button>
-                <button class="btn" onclick="window.parent.postMessage({kernelAction:'LAUNCH_WITH_FILE',targetApp:'settings'},'*')">Settings</button>
-                <button class="btn" onclick="window.parent.postMessage({kernelAction:'LAUNCH_WITH_FILE',targetApp:'subkernel'},'*')">Subkernel</button>
-            </div>
-        </div>
-    </div>
+
+<div class="hdr">
+  <span>🌀 OURO-HUB</span>
+  <span style="display:flex; gap:6px;">
+    <span class="pill" id="p-kernel">KERNEL: —</span>
+    <span class="pill" id="p-clock">—</span>
+  </span>
 </div>
+
+<div class="omni">
+  <input id="omni" placeholder="Type to launch an app, open a path, > run a shell command, or ? ask the model…"
+         autocomplete="off" spellcheck="false">
+  <button class="btn" onclick="runOmni()">Go</button>
+</div>
+
+<div class="body">
+  <div class="main">
+    <div class="card" id="results"><h3>Results</h3><div class="in" style="padding:2px" id="res-list"></div></div>
+
+    <div class="card"><h3>Workspace <span class="hint" id="open-count">0 open</span></h3>
+      <div class="in"><div class="tiles" id="tiles"></div></div>
+    </div>
+
+    <div class="card"><h3>Ask the Runtime <span class="hint" id="ai-model">—</span></h3><div class="in">
+      <div style="display:flex; gap:5px; margin-bottom:6px;">
+        <input id="ai-prompt" placeholder="prompt the local model…" style="flex:1; border:1px solid #7f9db9; padding:3px 6px; background:var(--surface); color:var(--text); font-family:inherit; font-size:11px;">
+        <button class="btn" onclick="askModel()">Send</button>
+      </div>
+      <div class="ai-out" id="ai-out">Idle.</div>
+    </div></div>
+  </div>
+
+  <div class="side">
+    <div class="card"><h3>Open Panels</h3><div class="in" style="padding:4px">
+      <div class="list" id="win-list"></div>
+    </div></div>
+
+    <div class="card"><h3>Recent</h3><div class="in" style="padding:4px">
+      <div class="list" id="recent-list"></div>
+    </div></div>
+
+    <div class="card"><h3>Pinned</h3><div class="in" style="padding:4px">
+      <div class="list" id="pin-list"></div>
+      <button class="btn mini" style="margin-top:5px; width:100%" onclick="pinCurrent()">📌 Pin Explorer path</button>
+    </div></div>
+
+    <div class="card"><h3>Host</h3><div class="in" id="host-stats">
+      <div class="hint">reading…</div>
+    </div></div>
+  </div>
+</div>
+
 <script>
-    const modules = [
-        { icon:'🖥️', name:'File Explorer', status:'online' },
-        { icon:'💻', name:'Terminal Shell', status:'online' },
-        { icon:'📝', name:'Code Studio', status:'online' },
-        { icon:'🎼', name:'Chorus Editor', status:'online' },
-        { icon:'🌎', name:'Web Browser', status:'online' },
-        { icon:'🎨', name:'Canvas Paint', status:'online' },
-        { icon:'🎵', name:'Media Player', status:'online' },
-        { icon:'📷', name:'Camera', status:'standby' },
-        { icon:'🖼️', name:'Gallery', status:'online' },
-        { icon:'🦙', name:'Ollama AI Bridge', status:'standby' },
-        { icon:'⚙️', name:'Settings', status:'online' },
-        { icon:'⚡', name:'Subkernel', status:'online' },
-        { icon:'🌀', name:'Ouro-Hub', status:'online' },
-        { icon:'📃', name:'Notepad', status:'online' }
-    ];
+const bus = window.subkernel;
+const K   = window.SubkernelBridge;
+const $   = (id) => document.getElementById(id);
 
-    function renderModules() {
-        const ml = document.getElementById('modules');
-        ml.innerHTML = modules.map(m => `<div class="module"><span class="icon">${m.icon}</span><span class="name">${m.name}</span><span class="status ${m.status}">${m.status.toUpperCase()}</span></div>`).join('');
+let windows = [];
+let recent  = bus.getState('hubRecent', []);
+let pinned  = bus.getState('hubPinned', []);
+let results = [], resIdx = 0;
+
+// ── live window awareness ────────────────────────────────────────────
+bus.on('Shell', 'windows', ({ windows: w }) => {
+  windows = w || [];
+  $('open-count').textContent = `${windows.length} open`;
+  renderTiles();
+  renderWindows();
+});
+
+// ── Hub remembers what Explorer touches: it becomes a real surface ───
+bus.on('Explorer', 'path-changed', ({ path }) => pushRecent({ kind: 'path', value: path }));
+bus.on('Explorer', 'selection', ({ path, is_dir }) => { if (!is_dir) pushRecent({ kind: 'file', value: path }); });
+
+function pushRecent(entry) {
+  recent = [entry, ...recent.filter(r => r.value !== entry.value)].slice(0, 12);
+  bus.setState('hubRecent', recent);
+  renderRecent();
+}
+
+// ── tiles ────────────────────────────────────────────────────────────
+function renderTiles() {
+  $('tiles').innerHTML = Object.entries(K.APPS).map(([id, a]) => {
+    const open = windows.some(w => w.id === id);
+    return `<div class="tile" onclick="K.openApp('${id}')" title="${a.uri}">
+      ${open ? '<span class="dot"></span>' : ''}
+      <span class="ic">${a.icon}</span><span class="nm">${a.title}</span></div>`;
+  }).join('');
+}
+
+function renderWindows() {
+  const el = $('win-list');
+  if (!windows.length) { el.innerHTML = '<div class="hint" style="padding:4px">Nothing open.</div>'; return; }
+  el.innerHTML = windows.map(w => `
+    <div class="item" onclick="bus.emit('Shell','focus-app',{app:'${w.id}'})">
+      <span>${K.APPS[w.id]?.icon || '📦'}</span>
+      <span class="g">${w.title}${w.focused ? ' •' : ''}</span>
+      <span class="x" onclick="event.stopPropagation();bus.emit('Shell','close-app',{app:'${w.id}'})">✕</span>
+    </div>`).join('');
+}
+
+function renderRecent() {
+  const el = $('recent-list');
+  if (!recent.length) { el.innerHTML = '<div class="hint" style="padding:4px">No activity yet.</div>'; return; }
+  el.innerHTML = recent.map((r, i) => `
+    <div class="item" onclick="openRecent(${i})" title="${r.value}">
+      <span>${r.kind === 'path' ? '📁' : '📄'}</span>
+      <span class="g">${String(r.value).split(/[\\\\/]/).pop() || r.value}</span>
+      <span class="x" onclick="event.stopPropagation();pinRecent(${i})">📌</span>
+    </div>`).join('');
+}
+
+function openRecent(i) {
+  const r = recent[i];
+  if (r.kind === 'path') { K.openApp('explorer'); bus.emit('Explorer', 'open-path', { path: r.value }); }
+  else K.openPath(r.value);
+}
+
+function pinRecent(i) {
+  const r = recent[i];
+  if (!pinned.some(p => p.value === r.value)) {
+    pinned = [...pinned, r].slice(0, 15);
+    bus.setState('hubPinned', pinned);
+    renderPinned();
+  }
+}
+
+function pinCurrent() {
+  const p = bus.getState('explorerPath', null);
+  if (!p) return;
+  if (!pinned.some(x => x.value === p)) {
+    pinned = [...pinned, { kind: 'path', value: p }];
+    bus.setState('hubPinned', pinned);
+    renderPinned();
+  }
+}
+
+function renderPinned() {
+  const el = $('pin-list');
+  if (!pinned.length) { el.innerHTML = '<div class="hint" style="padding:4px">Nothing pinned.</div>'; return; }
+  el.innerHTML = pinned.map((p, i) => `
+    <div class="item" onclick="openPin(${i})" title="${p.value}">
+      <span>${p.kind === 'path' ? '📁' : '📄'}</span>
+      <span class="g">${String(p.value).split(/[\\\\/]/).pop() || p.value}</span>
+      <span class="x" onclick="event.stopPropagation();unpin(${i})">✕</span>
+    </div>`).join('');
+}
+function openPin(i) { const p = pinned[i];
+  if (p.kind === 'path') { K.openApp('explorer'); bus.emit('Explorer','open-path',{ path: p.value }); }
+  else K.openPath(p.value); }
+function unpin(i) { pinned.splice(i,1); bus.setState('hubPinned', pinned); renderPinned(); }
+
+// ── omnibar: the thing that makes Hub a surface, not a launcher ──────
+const omni = $('omni');
+
+omni.addEventListener('input', () => {
+  const q = omni.value.trim();
+  if (!q) return hideResults();
+  results = [];
+
+  if (q.startsWith('>')) {
+    results.push({ icon: '💻', label: `Run: ${q.slice(1).trim()}`, kind: 'shell', act: () => runShell(q.slice(1).trim()) });
+  } else if (q.startsWith('?')) {
+    results.push({ icon: '✨', label: `Ask model: ${q.slice(1).trim()}`, kind: 'ai', act: () => { $('ai-prompt').value = q.slice(1).trim(); askModel(); } });
+  } else {
+    const lq = q.toLowerCase();
+    Object.entries(K.APPS)
+      .filter(([id, a]) => id.includes(lq) || a.title.toLowerCase().includes(lq))
+      .forEach(([id, a]) => results.push({ icon: a.icon, label: a.title, kind: 'app', act: () => K.openApp(id) }));
+
+    if (/[\\/:~]/.test(q)) {
+      results.push({ icon: '📂', label: `Open path: ${q}`, kind: 'path',
+        act: () => { K.openApp('explorer'); bus.emit('Explorer', 'open-path', { path: q }); pushRecent({ kind:'path', value:q }); } });
     }
+    recent.filter(r => String(r.value).toLowerCase().includes(lq))
+      .forEach(r => results.push({ icon: '🕘', label: r.value, kind: 'recent', act: () => K.openPath(r.value) }));
+  }
+  showResults();
+});
 
-    function updateStats() {
-        document.getElementById('uptime').textContent = Math.floor(performance.now()/1000) + 's';
-        if (performance.memory) document.getElementById('mem').textContent = Math.round(performance.memory.usedJSHeapSize/1048576);
-    }
+omni.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); resIdx = Math.min(resIdx + 1, results.length - 1); paintResults(); }
+  if (e.key === 'ArrowUp')   { e.preventDefault(); resIdx = Math.max(resIdx - 1, 0); paintResults(); }
+  if (e.key === 'Enter')     { e.preventDefault(); runOmni(); }
+  if (e.key === 'Escape')    { omni.value = ''; hideResults(); }
+});
 
-    renderModules();
-    updateStats();
-    setInterval(updateStats, 1000);
+function showResults() { resIdx = 0; $('results').style.display = results.length ? 'block' : 'none'; paintResults(); }
+function hideResults() { results = []; $('results').style.display = 'none'; }
+function paintResults() {
+  $('res-list').innerHTML = results.map((r, i) =>
+    `<div class="res ${i===resIdx?'on':''}" onclick="pick(${i})">
+       <span>${r.icon}</span><span>${r.label}</span><span class="k">${r.kind}</span></div>`).join('');
+}
+function pick(i) { results[i]?.act(); omni.value = ''; hideResults(); }
+function runOmni() { if (results.length) pick(resIdx); }
+
+async function runShell(cmd) {
+  const out = $('ai-out');
+  out.textContent = `$ ${cmd}\n…`;
+  try {
+    const r = await K.invoke('execute_shell_command', { cmd });
+    out.textContent = `$ ${cmd}\n${r || '(no output)'}`;
+  } catch (e) { out.textContent = `$ ${cmd}\n${e}`; }
+}
+
+async function askModel() {
+  const p = $('ai-prompt').value.trim();
+  if (!p) return;
+  const out = $('ai-out');
+  const model = bus.getState('model', 'gemma3:1b');
+  out.textContent = 'thinking…';
+  try {
+    const r = await K.invoke('query_ollama', { model, prompt: p });
+    out.textContent = String(r).trim();
+  } catch (e) { out.textContent = `model error: ${e}`; }
+}
+
+// ── host stats ───────────────────────────────────────────────────────
+async function loadHost() {
+  const el = $('host-stats');
+  if (!K.hasKernel) { el.innerHTML = '<div class="hint">Kernel offline.</div>'; return; }
+  try {
+    const s = await K.invoke('system_stats');
+    const used = s.total_mem_kb - s.free_mem_kb;
+    const pct = s.total_mem_kb ? Math.round(used / s.total_mem_kb * 100) : 0;
+    const gb = (kb) => (kb / 1048576).toFixed(1);
+    el.innerHTML = `
+      <div class="stat"><span>Host</span><b>${s.hostname}</b></div>
+      <div class="stat"><span>Processes</span><b>${s.proc_count}</b></div>
+      <div class="stat"><span>Memory</span><b>${gb(used)}/${gb(s.total_mem_kb)} GB</b></div>
+      <div class="meter"><i style="width:${pct}%"></i></div>
+      <div class="stat" style="margin-top:5px"><span>Panels</span><b>${windows.length}</b></div>`;
+  } catch (e) { el.innerHTML = `<div class="hint">${e}</div>`; }
+}
+
+// ── boot ─────────────────────────────────────────────────────────────
+$('p-kernel').textContent = `KERNEL: ${K.hasKernel ? 'ATTACHED' : 'OFFLINE'}`;
+$('ai-model').textContent = bus.getState('model', 'gemma3:1b');
+renderTiles(); renderWindows(); renderRecent(); renderPinned(); loadHost();
+bus.emit('Shell', 'windows-request', {});
+setInterval(() => { bus.emit('Shell', 'windows-request', {}); }, 3000);
+setInterval(loadHost, 5000);
+setInterval(() => $('p-clock').textContent = new Date().toLocaleTimeString(), 1000);
+omni.focus();
 </script>
 </body>
 </html>

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Numogram Drift</title>
+    <style>
+        body { background: #0a0e14; color: #7fd4ff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        canvas { border: 2px solid #c9a227; background: #0a0e14; cursor: none; box-shadow: 0 0 20px rgba(127, 212, 255, 0.2); }
+        #ui { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); pointer-events: none; text-align: center; width: 480px; }
+        .stat { font-size: 18px; color: #c9a227; text-shadow: 0 0 5px #c9a227; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div class="stat">SCORE: <span id="score">0</span> | DECAD: <span id="decad">0</span> | LIVES: <span id="lives">3</span></div>
+    </div>
+    <canvas id="gameCanvas" width="480" height="640"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const decadEl = document.getElementById('decad');
+        const livesEl = document.getElementById('lives');
+
+        let score = 0, decad = 0, lives = 3, gameState = 'START';
+        let playerX = 240, nodes = [], particles = [];
+        const playerSize = 20;
+
+        window.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            playerX = e.clientX - rect.left;
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if(e.key === 'ArrowLeft') playerX -= 20;
+            if(e.key === 'ArrowRight') playerX += 20;
+        });
+
+        function spawnNode() {
+            nodes.push({ x: Math.random() * 440 + 20, y: -20, val: Math.floor(Math.random() * 10), speed: 2 + (decad * 0.5) });
+        }
+
+        function reset() {
+            score = 0; decad = 0; lives = 3; nodes = []; particles = [];
+            scoreEl.innerText = score; decadEl.innerText = decad; livesEl.innerText = lives;
+            gameState = 'PLAYING';
+        }
+
+        function update() {
+            if (gameState !== 'PLAYING') return;
+            if (Math.random() < 0.02) spawnNode();
+            
+            nodes.forEach((n, i) => {
+                n.y += n.speed;
+                if (n.y > 640) {
+                    nodes.splice(i, 1);
+                    lives--;
+                    livesEl.innerText = lives;
+                    if (lives <= 0) gameState = 'GAMEOVER';
+                }
+                if (Math.abs(n.x - playerX) < 25 && Math.abs(n.y - 610) < 20) {
+                    nodes.splice(i, 1);
+                    score++;
+                    if (score % 10 === 0) decad++;
+                    scoreEl.innerText = score; decadEl.innerText = decad;
+                }
+            });
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, 480, 640);
+            
+            if (gameState === 'START') {
+                ctx.fillStyle = '#c9a227';
+                ctx.font = '30px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('NUMOGRAM DRIFT', 240, 300);
+                ctx.font = '16px Arial';
+                ctx.fillText('CLICK TO BEGIN', 240, 340);
+            } else if (gameState === 'GAMEOVER') {
+                ctx.fillStyle = '#ff4444';
+                ctx.font = '30px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('DRIFT COLLAPSED', 240, 300);
+                ctx.fillStyle = '#c9a227';
+                ctx.font = '16px Arial';
+                ctx.fillText('CLICK TO REBOOT', 240, 340);
+            } else {
+                ctx.fillStyle = '#7fd4ff';
+                ctx.font = '24px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('✦', playerX, 620);
+
+                nodes.forEach(n => {
+                    ctx.fillStyle = '#c9a227';
+                    ctx.beginPath();
+                    ctx.arc(n.x, n.y, 10, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#0a0e14';
+                    ctx.font = '12px Arial';
+                    ctx.fillText(n.val, n.x, n.y + 4);
+                });
+            }
+            requestAnimationFrame(() => { update(); draw(); });
+        }
+
+        canvas.addEventListener('click', () => {
+            if (gameState === 'START' || gameState === 'GAMEOVER') reset();
+        });
+
+        draw();
+    </script>
+</body>
+</html>

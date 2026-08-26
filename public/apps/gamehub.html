@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Game Hub</title>
+<style>
+  :root { --bg:#0a0e14; --acc:#7fd4ff; --gold:#c9a227; }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--acc); font-family: 'Segoe UI', sans-serif; margin:0; padding:16px; }
+  h1 { color: var(--gold); text-shadow:0 0 8px var(--gold); font-size:22px; margin:0 0 4px; }
+  .sub { color:#5a7894; font-size:12px; margin-bottom:14px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:12px; }
+  .card { background:#0e141d; border:1px solid #1c2a38; border-radius:8px; padding:14px; cursor:pointer; transition:.15s; }
+  .card:hover { border-color:var(--acc); box-shadow:0 0 14px rgba(127,212,255,.18); transform:translateY(-2px); }
+  .card .ico { font-size:30px; }
+  .card .name { color:var(--gold); margin-top:8px; font-weight:600; }
+  .card .desc { color:#5a7894; font-size:11px; margin-top:4px; line-height:1.4; }
+  .stage { position:fixed; inset:0; background:#05080c; display:none; z-index:50; }
+  .stage iframe { width:100%; height:100%; border:none; }
+  .back { position:fixed; top:12px; left:12px; z-index:60; background:var(--gold); color:#0a0e14;
+          border:none; padding:8px 14px; border-radius:6px; cursor:pointer; font-weight:700; display:none; }
+</style>
+</head>
+<body>
+  <h1>🎮 GAME HUB</h1>
+  <div class="sub">Owl + Logos collaborative builds · CHORUS decad arcade</div>
+  <div class="grid" id="grid"></div>
+  <button class="back" id="back">◄ EXIT</button>
+  <div class="stage" id="stage"><iframe id="frame" src=""></iframe></div>
+
+  <script src="subkernel-bus.js"></script>
+  <script>
+    const GAMES = [
+      { id:'numogram_drift', ico:'✦', name:'Numogram Drift', desc:'Catch falling 0–9 nodes. Every 10 = +1 decad level. Miss 3 = collapse.', bin:null },
+      { id:'luanti',         ico:'⛏️', name:'Luanti Voxel World', desc:'Owl + Logos agent simulacrum — a shared 1:1:1 voxel world. Launches the Luanti client.', bin:'luanti' },
+    ];
+    const grid = document.getElementById('grid');
+    const stage = document.getElementById('stage');
+    const frame = document.getElementById('frame');
+    const back = document.getElementById('back');
+
+    // Tauri v2 invoke (global __TAURI__.core), matching the subkernel's pattern.
+    const invoke = (window.__TAURI__ && window.__TAURI__.core)
+      ? (cmd, args) => window.__TAURI__.core.invoke(cmd, args)
+      : null;
+
+    GAMES.forEach(g => {
+      const c = document.createElement('div');
+      c.className = 'card';
+      c.innerHTML = `<div class="ico">${g.ico}</div><div class="name">${g.name}</div><div class="desc">${g.desc}</div>`;
+      c.onclick = () => launch(g);
+      grid.appendChild(c);
+    });
+
+    function launch(g) {
+      if (g.bin === 'luanti') {
+        // Native client: spawn via Rust command, don't load into the iframe.
+        if (!invoke) { alert('Tauri invoke unavailable — cannot launch Luanti.'); return; }
+        invoke('launch_luanti').then(path => {
+          console.log('Luanti launched from', path);
+        }).catch(e => alert('Failed to launch Luanti: ' + e));
+        return;
+      }
+      // Resolve sibling games relative to THIS document's directory. The hub
+      // lives in /apps/, and the games are its siblings there — so a bare
+      // 'apps/...' path would double-prefix into /apps/apps/... and 404.
+      const base = location.pathname.replace(/[^/]*$/, '');
+      frame.src = base + g.id + '.html';
+      stage.style.display = 'block';
+      back.style.display = 'block';
+      grid.parentElement.style.visibility = 'hidden';
+      if (window.bus) bus.emit('Shell', 'focus-app', { app: 'gamehub' });
+    }
+    back.onclick = () => {
+      frame.src = 'about:blank';
+      stage.style.display = 'none';
+      back.style.display = 'none';
+      grid.parentElement.style.visibility = 'visible';
+    };
+
+    // Allow Owl (or any bus peer) to launch a game remotely.
+    if (window.bus) bus.on('GameHub', 'launch', ({ id }) => {
+      const g = GAMES.find(x => x.id === id); if (g) launch(g);
+    });
+  </script>
+</body>
+</html>

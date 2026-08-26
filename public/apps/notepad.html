@@ -1,21 +1,127 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <style>
-        body, html { margin:0; padding:0; height:100%; display:flex; flex-direction:column; font-family:sans-serif; }
-        .bar { background:#ece9d8; border-bottom:1px solid #999; padding:3px 6px; font-size:12px; display:flex; gap:10px; }
-        textarea { flex:1; border:none; outline:none; padding:8px; font-family:monospace; font-size:13px; resize:none; }
-    </style>
+<meta charset="UTF-8">
+<title>Notepad</title>
+<script src="../subkernel-bus.js"></script>
+<script src="../subkernel-bridge.js"></script>
+<style>
+:root { --bar:#ece9d8; --bg:#fff; --text:#000; --accent-color:#0055ea; --muted:#5a6270; }
+[data-theme="dark"]  { --bar:#262b34; --bg:#12151a; --text:#d7dce4; --muted:#93a0b4; }
+[data-theme="slate"] { --bar:#353c4a; --bg:#1e222a; --text:#e2e8f0; --muted:#94a3b8; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body,html { height:100%; display:flex; flex-direction:column; font-family:Tahoma,"Segoe UI",sans-serif; font-size:11px; background:var(--bg); color:var(--text); }
+.bar { background:var(--bar); border-bottom:1px solid #999; padding:3px 6px; display:flex; gap:3px; align-items:center; }
+.btn { background:linear-gradient(180deg,#fff,#e3e0d0); border:1px solid #7f9db9; padding:2px 8px; cursor:pointer; border-radius:2px; font-size:11px; font-family:inherit; color:#000; }
+.btn:hover { background:linear-gradient(180deg,#eaf2ff,#b5d3ff); }
+.sep { width:1px; height:16px; background:#aca899; margin:0 3px; }
+textarea { flex:1; border:none; outline:none; padding:9px; font-family:Consolas,monospace; font-size:13px; resize:none; background:var(--bg); color:var(--text); line-height:1.45; tab-size:4; }
+.status { background:var(--bar); border-top:1px solid #aca899; padding:3px 8px; display:flex; justify-content:space-between; gap:10px; color:var(--muted); }
+.status .dirty { color:#b45309; font-weight:bold; }
+</style>
 </head>
 <body>
-    <div class="bar"><span>File</span><span>Edit</span><span>Format</span><span>View</span></div>
-    <textarea id="editor" placeholder="Type text here..."></textarea>
-    <script>
-        window.addEventListener('message', (e) => {
-            if(e.data.type === 'LOAD_FILE_CONTENT') {
-                document.getElementById('editor').value = e.data.content || `// Loaded: ${e.data.filename || 'unknown'}\n\nFile content would appear here.`;
-            }
-        });
-    </script>
+  <div class="bar">
+    <button class="btn" onclick="openDialog()">Open</button>
+    <button class="btn" onclick="save()">Save</button>
+    <button class="btn" onclick="saveAs()">Save As</button>
+    <div class="sep"></div>
+    <button class="btn" onclick="newDoc()">New</button>
+    <div class="sep"></div>
+    <button class="btn" onclick="wrapToggle()" id="wrap-btn">Wrap: on</button>
+    <button class="btn" onclick="sendToDiagram()">→ Diagrammer</button>
+    <span style="flex:1"></span>
+    <span id="title" style="font-weight:bold"></span>
+  </div>
+
+  <textarea id="editor" spellcheck="false" placeholder="Type here, or open a file from Explorer…"></textarea>
+
+  <div class="status">
+    <span id="path">unsaved</span>
+    <span id="stats">0 lines · 0 chars</span>
+    <span id="dirty"></span>
+  </div>
+
+<script>
+const bus = window.subkernel, K = window.SubkernelBridge, $ = (i)=>document.getElementById(i);
+const ed = $('editor');
+let filePath = null, dirty = false;
+
+function setTitle() {
+  const name = filePath ? filePath.split(/[\\/]/).pop() : 'Untitled';
+  $('title').textContent = name + (dirty ? ' *' : '');
+  $('path').textContent = filePath || 'unsaved';
+  $('dirty').innerHTML = dirty ? '<span class="dirty">UNSAVED CHANGES</span>' : 'saved';
+}
+function stats() {
+  const v = ed.value;
+  $('stats').textContent = `${v ? v.split('\n').length : 0} lines · ${v.length} chars`;
+}
+ed.addEventListener('input', () => { dirty = true; setTitle(); stats(); });
+
+async function load(path) {
+  if (!K.hasKernel) { ed.value = 'Native kernel not attached — cannot read files.'; return; }
+  try {
+    ed.value = await K.invoke('read_text_file', { path });
+    filePath = path; dirty = false; setTitle(); stats();
+    bus.emit('Notepad', 'opened', { path });
+  } catch (e) { ed.value = `Failed to open ${path}\n\n${e}`; }
+}
+
+async function save() {
+  if (!filePath) return saveAs();
+  try {
+    await K.invoke('write_text_file', { path: filePath, contents: ed.value });
+    dirty = false; setTitle();
+    bus.emit('Notepad', 'saved', { path: filePath });
+    bus.emit('Explorer', 'refresh', {});
+  } catch (e) { alert(`Save failed: ${e}`); }
+}
+
+async function saveAs() {
+  const dir = bus.getState('explorerPath', '~');
+  const name = prompt('Save as (filename):', filePath ? filePath.split(/[\\/]/).pop() : 'untitled.txt');
+  if (!name) return;
+  try {
+    const p = await K.invoke('create_file', { parent: dir, name, contents: ed.value });
+    filePath = p; dirty = false; setTitle();
+    bus.emit('Explorer', 'refresh', {});
+  } catch (e) { alert(`Save failed: ${e}`); }
+}
+
+function openDialog() {
+  const p = prompt('Open path:', bus.getState('explorerPath', '~'));
+  if (p) load(p);
+}
+function newDoc() {
+  if (dirty && !confirm('Discard unsaved changes?')) return;
+  ed.value = ''; filePath = null; dirty = false; setTitle(); stats();
+}
+let wrap = true;
+function wrapToggle() { wrap = !wrap; ed.style.whiteSpace = wrap ? 'pre-wrap' : 'pre'; $('wrap-btn').textContent = `Wrap: ${wrap?'on':'off'}`; }
+
+function sendToDiagram() {
+  K.openApp('mermaid');
+  bus.emit('Diagrammer', 'load-source', { source: ed.value, name: filePath });
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.key === 's') { e.preventDefault(); save(); }
+  if (e.ctrlKey && e.key === 'o') { e.preventDefault(); openDialog(); }
+});
+
+// Bus: Explorer / shell route files here.
+bus.on('notepad', 'open-file', ({ path }) => path && load(path));
+bus.on('Notepad', 'open-file', ({ path }) => path && load(path));
+bus.on('Notepad', 'set-text',  ({ text }) => { ed.value = text ?? ''; dirty = true; setTitle(); stats(); });
+bus.on('Notepad', 'query',     () => bus.emit('Notepad','query:reply',{ path:filePath, text:ed.value }));
+
+// Legacy postMessage support.
+window.addEventListener('message', (e) => {
+  if (e.data?.type === 'LOAD_FILE_CONTENT') { ed.value = e.data.content; dirty = true; setTitle(); stats(); }
+});
+
+setTitle(); stats();
+</script>
 </body>
 </html>
