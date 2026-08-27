@@ -28,6 +28,36 @@
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Tahoma", "Segoe UI", sans-serif; -webkit-tap-highlight-color: transparent; }
         body, html { width: 100%; height: 100%; overflow: hidden; background-color: #003399; user-select: none; touch-action: none; }
 
+        /* ===== Frutiger Aero theme — glossy glass, sky-gradient (mirrors Tauri shell) ===== */
+        body[data-theme="aero"] {
+            --aero-glass: rgba(255,255,255,0.55);
+            --aero-glow: 0 0 12px rgba(120,180,255,0.45);
+            background-color: #aacbef !important;
+            font-family: 'Segoe UI', 'Tahoma', sans-serif;
+        }
+        body[data-theme="aero"] #desktop {
+            background: radial-gradient(circle at 50% 120%, rgba(255,255,255,0.55), rgba(255,255,255,0) 60%),
+                        linear-gradient(180deg, #cfe3ff 0%, #aacbef 45%, #8fb3e0 100%) !important;
+        }
+        body[data-theme="aero"] .shortcut {
+            color: #06203f; text-shadow: 0 1px 1px rgba(255,255,255,0.8);
+            background: var(--aero-glass); border: 1px solid #b5d3ff;
+            border-radius: 8px; backdrop-filter: blur(3px);
+        }
+        body[data-theme="aero"] .shortcut:hover { background: rgba(255,255,255,0.78); transform: translateY(-2px) scale(1.04); box-shadow: var(--aero-glow); }
+        body[data-theme="aero"] #taskbar {
+            background: linear-gradient(180deg, #eaf3ff 0%, #b9d4f2 8%, #7fa9da 100%);
+            border-top: 1px solid #5b86bd; box-shadow: 0 -1px 6px rgba(40,80,140,0.3);
+        }
+        body[data-theme="aero"] #start-btn {
+            background: linear-gradient(180deg, #6fcf5f 0%, #3f9c3a 50%, #2c7a2c 100%);
+            color: #fff; border: 1px solid #1f5e1f; border-radius: 6px;
+            text-shadow: 0 1px 1px rgba(0,0,0,0.4);
+        }
+        body[data-theme="aero"] .system-tray, body[data-theme="aero"] #tray-status { color: #06203f; }
+        .shortcut[data-app="garden"] span.icon { filter: drop-shadow(0 0 6px rgba(80,220,120,0.7)); }
+        .shortcut[data-app="garden"]:hover { box-shadow: 0 0 14px rgba(80,220,120,0.6); }
+
         /* ── Desktop ── */
         #desktop {
             width: 100%; height: calc(100% - 30px);
@@ -76,6 +106,14 @@
         }
         .title-controls button:active { opacity: 0.7; }
         .btn-close { background: linear-gradient(to bottom, #e44d32 0%, #cc1600 100%) !important; }
+
+        .tray-btn {
+            font-size: 10px; padding: 2px 8px; margin-left: 4px; cursor: pointer;
+            border: 1px solid #5b86bd; border-radius: 4px; color: #06203f;
+            background: rgba(255,255,255,0.6); font-family: inherit;
+        }
+        .tray-btn:hover { background: rgba(255,255,255,0.9); }
+        body[data-theme="aero"] .tray-btn { border-color: #6f9bd1; }
 
         .window-body { flex: 1; overflow: hidden; background: #fff; position: relative; display: flex; flex-direction: column; }
         .app-iframe { width: 100%; height: 100%; border: none; background: #fff; }
@@ -294,9 +332,10 @@
     <div class="shortcut" ondblclick="launchApp('numogram_drift')"><span class="icon">🔢</span>Numogram</div>
     <div class="shortcut" ondblclick="launchApp('settings')"><span class="icon">🔧</span>Settings</div>
     <div class="shortcut" ondblclick="launchApp('subkernel')"><span class="icon">⚡</span>Subkernel</div>
+    <div class="shortcut" data-app="garden" ondblclick="launchApp('garden')"><span class="icon">🌿</span>Garden</div>
 </div>
 
-<!-- Taskbar (desktop only) -->
+<!-- Taskbar (desktop only) — parity with the Tauri shell: live status + LEDs + clock, no stray placeholders -->
 <div id="taskbar" style="display:none">
     <div class="taskbar-left">
         <button id="start-btn" onclick="toggleStartMenu()">
@@ -311,10 +350,20 @@
         <div class="active-tasks" id="taskbar-tabs"></div>
     </div>
     <div class="system-tray">
-        <span class="tray-icon" title="Network">🌐</span>
-        <span class="tray-icon" title="Volume">🔊</span>
-        <span class="tray-icon" title="Battery">🔋</span>
-        <span id="tray-clock">12:00 PM</span>
+        <div class="tray-group" id="tray-net" title="Network">
+            <span class="tray-ico">🌐</span><div class="led-indicator led-offline" id="led-net"></div>
+        </div>
+        <div class="tray-group" id="tray-ollama" title="Ollama model link">
+            <span class="tray-ico">🧠</span><div class="led-indicator led-offline" id="led-ollama"></div>
+        </div>
+        <div class="tray-group" id="tray-batt" title="Battery">
+            <span class="tray-ico" id="batt-ico">🔋</span><span class="tray-txt" id="batt-txt"></span>
+        </div>
+        <div id="tray-status" style="font-size:10px; color:inherit; margin-right:6px; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></div>
+        <span id="mode-indicator" class="tray-txt" style="font-weight:bold; margin-right:4px;">☁️ Cloud</span>
+        <button class="tray-btn" onclick="setMode(currentMode==='tauri'?'cloud':'tauri')" title="Switch between Local Iron (Tauri) and Cloud views">🔄 Mode</button>
+        <button class="tray-btn" onclick="setTheme(currentTheme==='aero'?'rubedo':'aero')" title="Toggle Frutiger Aero theme">🌤️ Aero</button>
+        <div id="tray-clock"></div>
     </div>
 </div>
 
@@ -415,8 +464,30 @@ const APP_SIZES = {
 const DRAWER_APPS = [
     'explorer','taskmanager','terminal','notepad','mermaid','mindmap',
     'chorus-editor','hub','browser','logos','gamehub','gallery',
-    'player','paint','control-panel','numogram_drift','settings','subkernel'
+    'player','paint','control-panel','numogram_drift','settings','subkernel','garden'
 ];
+
+// ── Theme + Mode switching (mirrors the Tauri shell's contract) ──
+// Cloud runs as the "PR safe+clean" parity copy; MODE toggles the presentation
+// between the native-Tauri feel and the cloud-mobile feel without swapping backends.
+const THEME_MAP = { rubedo: 'rubedo', xp: 'rubedo', md3: 'md3', aero: 'aero' };
+let currentTheme = localStorage.getItem('bliss26_theme') || 'rubedo';
+let currentMode = localStorage.getItem('bliss26_mode') || 'cloud';
+window.setTheme = function(theme) {
+    currentTheme = theme;
+    document.body.setAttribute('data-theme', THEME_MAP[theme] || 'rubedo');
+    localStorage.setItem('bliss26_theme', currentTheme);
+};
+window.setMode = function(mode) {
+    currentMode = mode;
+    document.body.setAttribute('data-mode', mode);
+    localStorage.setItem('bliss26_mode', currentMode);
+    const m = document.getElementById('mode-indicator');
+    if (m) m.textContent = mode === 'tauri' ? '🖥️ Local Iron' : '☁️ Cloud';
+};
+// Apply persisted state on boot.
+if (THEME_MAP[currentTheme]) document.body.setAttribute('data-theme', THEME_MAP[currentTheme]);
+window.setMode(currentMode);
 
 function bootDesktop() {
     document.getElementById('login-screen').style.display = 'none';

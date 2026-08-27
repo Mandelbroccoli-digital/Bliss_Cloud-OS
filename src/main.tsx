@@ -1,10 +1,17 @@
-// Bliss OS v0.0.9 — desktop shell runs entirely from index.html
-// This module is intentionally a no-op so the MUI template never overrides the shell.
+// Bliss OS — entry point for the hosted React control surface.
+// The OS desktop shell runs from index.html; main.tsx mounts the React
+// ControlBar (see App.tsx) into #root. This is the "hosted react engine"
+// that auto-deploys to Vercel from this same git on every push.
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import ControlBar from './App'
 
-// Roboto font import retained for any future React-mounted panels
-import '@fontsource/roboto/300.css';
-import '@fontsource/roboto/400.css';
-import '@fontsource/roboto/500.css';
-import '@fontsource/roboto/700.css';
-
-// Do NOT mount React — the OS shell lives in index.html directly.
+const root = document.getElementById('root')
+if (root) {
+  root.style.display = 'block'
+  ReactDOM.createRoot(root).render(
+    <React.StrictMode>
+      <ControlBar />
+    </React.StrictMode>
+  )
+}

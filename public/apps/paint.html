@@ -72,16 +72,22 @@
 
         async function saveToHost() {
             const dataUrl = canvas.toDataURL('image/png');
-            if (window.parent && window.parent.__TAURI_INTERNALS__) {
-                try {
-                    await window.parent.__TAURI__.core.invoke('execute_shell_command', {
-                        cmd: `echo Canvas image export triggered (${dataUrl.length} bytes)`,
-                        cwd: null
-                    });
-                    alert("Image dispatched to native host filesystem.");
-                } catch(e) { alert("Save Error: " + e); }
-            } else {
-                alert("Mock Mode: Image Base64 generated.");
+            const b64 = dataUrl.split(',')[1] || '';
+            const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const path = 'C:/Users/enemy/Documents/Bliss_Paint_' + stamp + '.png';
+            try {
+                if (window.subkernel && window.subkernel.invoke) {
+                    await window.subkernel.invoke('write_text_file', { path: path, contents: b64 });
+                    alert('Saved to host FS:
+' + path);
+                } else {
+                    alert('No kernel bridge — image generated (' + b64.length + ' bytes base64).');
+                }
+            } catch (e) {
+                const a = document.createElement('a'); a.href = dataUrl; a.download = 'bliss_paint_' + stamp + '.png'; a.click();
+                console.warn('write_text_file failed, downloaded instead:', e);
+            }
+        }
             }
         }
     </script>
