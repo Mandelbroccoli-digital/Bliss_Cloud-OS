@@ -31,7 +31,8 @@
         /* ── Desktop ── */
         #desktop {
             width: 100%; height: calc(100% - 30px);
-            background: linear-gradient(135deg, #1a4a8a 0%, #2a6ac4 50%, #1a4a8a 100%);
+            background: url('/wallpaper-sunset.webp') no-repeat center center;
+            background-size: cover;
             position: relative; padding: 15px;
             display: grid; grid-template-columns: repeat(auto-fill, 90px);
             grid-template-rows: repeat(auto-fill, 90px); grid-auto-flow: column; gap: 12px;
@@ -353,6 +354,7 @@
 <div id="ctx-menu">
     <div class="ctx-item" onclick="closeCtxMenu()">Refresh Desktop</div>
     <div class="ctx-sep"></div>
+    <div class="ctx-item" onclick="changeWallpaper();closeCtxMenu()">🎨 Next Wallpaper</div>
     <div class="ctx-item" onclick="launchApp('settings');closeCtxMenu()">Display Settings</div>
     <div class="ctx-item" onclick="launchApp('terminal');closeCtxMenu()">Open Terminal</div>
 </div>
@@ -667,6 +669,36 @@ function openDrawer() {
     drawer.classList.add('open');
 }
 function closeDrawer() { document.getElementById('mobile-drawer').classList.remove('open'); }
+
+const Wallpapers = [
+    '/wallpaper-sunset.webp',
+    '/wallpaper-aurora.webp',
+    '/wallpaper-ocean.webp',
+    'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+    'linear-gradient(135deg, #003399 0%, #001133 100%)',
+    'linear-gradient(135deg, #1e1b4b 0%, #311b92 100%)'
+];
+let currentWallpaperIdx = parseInt(localStorage.getItem('bliss26_wp_idx') || '0');
+
+function applyWallpaper(idx) {
+    const desktop = document.getElementById('desktop');
+    if (!desktop) return;
+    const wp = Wallpapers[idx % Wallpapers.length];
+    if (wp.startsWith('http') || wp.startsWith('/')) {
+        desktop.style.background = `url('${wp}') no-repeat center center`;
+        desktop.style.backgroundSize = 'cover';
+    } else {
+        desktop.style.background = wp;
+    }
+    localStorage.setItem('bliss26_wp_idx', idx % Wallpapers.length);
+}
+
+function changeWallpaper() {
+    currentWallpaperIdx++;
+    applyWallpaper(currentWallpaperIdx);
+}
+
+applyWallpaper(currentWallpaperIdx);
 
 document.addEventListener('contextmenu', e => {
     if (isMobile()) return;
