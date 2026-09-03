@@ -16,60 +16,7 @@
     <script src="/logos-tools.js"></script>
     <script src="/logos-engine.js"></script>
     <script src="/mcp-client.js"></script>
-    <style>
-        :root {
-            --xp-taskbar: linear-gradient(to bottom, #245edb 0%, #3971ed 10%, #1741b8 100%);
-            --xp-start: linear-gradient(to bottom, #388238 0%, #62b262 10%, #296029 100%);
-            --win-bg: #ece9d8;
-            --win-border: #004eae;
-            --xp-gray: #f1efe2;
-            --mobile-breakpoint: 768px;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Tahoma", "Segoe UI", sans-serif; -webkit-tap-highlight-color: transparent; }
-        body, html { width: 100%; height: 100%; overflow: hidden; background-color: #003399; user-select: none; touch-action: none; }
-
-        /* ===== Frutiger Aero theme — glossy glass, sky-gradient (mirrors Tauri shell) ===== */
-        body[data-theme="aero"] {
-            --aero-glass: rgba(255,255,255,0.55);
-            --aero-glow: 0 0 12px rgba(120,180,255,0.45);
-            background-color: #aacbef !important;
-            font-family: 'Segoe UI', 'Tahoma', sans-serif;
-        }
-        body[data-theme="aero"] #desktop {
-            background: radial-gradient(circle at 50% 120%, rgba(255,255,255,0.55), rgba(255,255,255,0) 60%),
-                        linear-gradient(180deg, #cfe3ff 0%, #aacbef 45%, #8fb3e0 100%) !important;
-        }
-        body[data-theme="aero"] .shortcut {
-            color: #06203f; text-shadow: 0 1px 1px rgba(255,255,255,0.8);
-            background: var(--aero-glass); border: 1px solid #b5d3ff;
-            border-radius: 8px; backdrop-filter: blur(3px);
-        }
-        body[data-theme="aero"] .shortcut:hover { background: rgba(255,255,255,0.78); transform: translateY(-2px) scale(1.04); box-shadow: var(--aero-glow); }
-        body[data-theme="aero"] #taskbar {
-            background: linear-gradient(180deg, #eaf3ff 0%, #b9d4f2 8%, #7fa9da 100%);
-            border-top: 1px solid #5b86bd; box-shadow: 0 -1px 6px rgba(40,80,140,0.3);
-        }
-        body[data-theme="aero"] #start-btn {
-            background: linear-gradient(180deg, #6fcf5f 0%, #3f9c3a 50%, #2c7a2c 100%);
-            color: #fff; border: 1px solid #1f5e1f; border-radius: 6px;
-            text-shadow: 0 1px 1px rgba(0,0,0,0.4);
-        }
-        body[data-theme="aero"] .system-tray, body[data-theme="aero"] #tray-status { color: #06203f; }
-        .shortcut[data-app="garden"] span.icon { filter: drop-shadow(0 0 6px rgba(80,220,120,0.7)); }
-        .shortcut[data-app="garden"]:hover { box-shadow: 0 0 14px rgba(80,220,120,0.6); }
-
-        /* ── Desktop ── */
-        #desktop {
-            width: 100%; height: calc(100% - 30px);
-            background: url('/wallpaper-sunset.webp') no-repeat center center;
-            background-size: cover;
-            position: relative; padding: 15px;
-            display: grid; grid-template-columns: repeat(auto-fill, 90px);
-            grid-template-rows: repeat(auto-fill, 90px); grid-auto-flow: column; gap: 12px;
-            overflow: hidden;
-        }
-[... trimmed for brevity ...]
-    </style>
+    <link rel="stylesheet" href="/style.css">
   <meta property="og:image" content="https://bolt.new/static/og_default.png">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:image" content="https://bolt.new/static/og_default.png">
