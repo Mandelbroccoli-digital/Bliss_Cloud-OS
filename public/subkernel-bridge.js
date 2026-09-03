@@ -19,7 +19,7 @@
     mindmap:        { uri: 'apps/mindmap.html',        icon: '🌸', title: 'Floret',          kind: 'app' },
     terminal:       { uri: 'apps/terminal.html',       icon: '💻', title: 'Terminal',        kind: 'app' },
     notepad:        { uri: 'apps/notepad.html',        icon: '📃', title: 'Notepad',         kind: 'app' },
-    'chorus-editor':{ uri: 'apps/chorus-editor.html',  icon: '🎼', title: 'Chorus Editor',   kind: 'app' },
+    chorus-editor:  { uri: 'apps/chorus-editor.html',  icon: '🎼', title: 'Chorus Editor',   kind: 'app' },
     browser:        { uri: 'apps/browser.html',        icon: '🌎', title: 'Browser',         kind: 'app' },
     logos:          { uri: 'apps/logos.html',          icon: '🦀', title: 'Logos',           kind: 'system' },
     gamehub:        { uri: 'apps/gamehub.html',        icon: '🎮', title: 'Game Hub',        kind: 'app' },
