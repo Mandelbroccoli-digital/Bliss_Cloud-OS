@@ -14,10 +14,10 @@ declare global {
 }
 
 function ControlBar() {
-  const [, setThemeState] = useState(
+  const [_theme, setThemeState] = useState(
     () => localStorage.getItem('bliss26_theme') || 'rubedo'
   )
-  const [, setModeState] = useState(
+  const [_mode, setModeState] = useState(
     () => localStorage.getItem('bliss26_mode') || 'cloud'
   )
 
