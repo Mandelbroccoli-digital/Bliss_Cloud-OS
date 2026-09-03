@@ -43,23 +43,9 @@ function ControlBar() {
     setModeState(next)
   }
 
-  return (
-    <div style={{
-      position: 'fixed', top: 6, right: 8, zIndex: 200000,
-      display: 'flex', gap: 6, fontFamily: 'Segoe UI, Tahoma, sans-serif'
-    }}>
-      <span style={{
-        fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 4,
-        background: 'rgba(0,0,0,0.35)', color: '#fff'
-      }}>
-        {mode === 'tauri' ? '🖥️ Local Iron' : '☁️ Cloud'}
-      </span>
-      <button onClick={toggleMode} title="Switch Local Iron ↔ Cloud"
-        style={btn}>🔄 Mode</button>
-      <button onClick={toggleTheme} title="Toggle Frutiger Aero"
-        style={btn}>🌤️ Aero</button>
-    </div>
-  )
+  // The top-right control bar has been intentionally disabled.
+  // Theme/mode toggles are available only via the taskbar tray buttons.
+  return null
 }
 
 const btn = {
@@ -68,11 +54,8 @@ const btn = {
   background: 'rgba(255,255,255,0.6)'
 }
 
-// Mount only if the shell reserved a visible root (set in index.html).
-const root = document.getElementById('root')
-if (root) {
-  root.style.display = 'block'
-  ReactDOM.createRoot(root).render(<ControlBar />)
-}
+// NOTE: We intentionally do NOT mount this React control surface by default
+// (the host shell already exposes equivalent controls in the taskbar). This
+// avoids duplicate UI (top-right buttons) that can obstruct the toolbar.
 
 export default ControlBar
