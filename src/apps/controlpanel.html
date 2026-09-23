@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--cloudos-head-->
+<meta charset="utf-8">
+<title>Control Panel</title>
+<style>
+  #cp-main { flex: 1; min-height: 0; overflow: auto; padding: 10px; display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-content: start; }
+  .cp-card { background: var(--panel); border: 1px solid var(--border); border-radius: 7px; padding: 11px; }
+  .cp-card h4 { margin: 0 0 8px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); }
+  .wall-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 7px; }
+  .wall-item { height: 52px; border-radius: 5px; border: 2px solid var(--border); cursor: pointer; position: relative; overflow: hidden; }
+  .wall-item:hover { border-color: var(--accent); }
+  .wall-item.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .wall-item span { position: absolute; bottom: 0; left: 0; right: 0; font-size: 8.5px; padding: 2px 4px; background: rgba(0,0,0,.55); color: #fff; text-align: center; }
+  .row { display: flex; align-items: center; gap: 7px; padding: 4px 0; font-size: 11.5px; }
+  .row .grow { flex: 1; }
+  .meter { height: 10px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
+  .meter > div { height: 100%; background: var(--accent); }
+  .kv { display: flex; gap: 8px; font-size: 10.5px; font-family: var(--mono); padding: 2px 0; }
+  .kv .k { color: var(--text-dim); min-width: 108px; }
+  .kv .v { flex: 1; word-break: break-all; }
+  label.radio { display: flex; align-items: center; gap: 6px; font-size: 11.5px; cursor: pointer; }
+</style>
+</head>
+<body class="os-app">
+  <div id="cp-menu"></div>
+  <div class="toolbar">
+    <span class="chip">🎛️ CONTROL PANEL</span>
+    <span class="tool-sep"></span>
+    <button class="tool" id="cp-appearance">Appearance</button>
+    <button class="tool" id="cp-graph">Graph</button>
+    <button class="tool" id="cp-storage">Storage</button>
+    <button class="tool" id="cp-system">System</button>
+    <span class="spacer"></span>
+    <span class="chip" id="cp-chip">–</span>
+  </div>
+  <div id="cp-main"></div>
+  <div class="statusbar">
+    <span id="cp-status">ready</span>
+    <span id="cp-right"></span>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+  var c = null;
+  var section = 'appearance';
+
+  function esc(v) { return CloudOS.escapeHtml(v); }
+  function graph() { return c.graph(); }
+
+  function setStatus(text) {
+    document.getElementById('cp-status').textContent = text;
+  }
+
+  function card(title, body) {
+    return '<div class="cp-card"><h4>' + esc(title) + '</h4>' + body + '</div>';
+  }
+
+  function kv(key, value) {
+    return '<div class="kv"><span class="k">' + esc(key) + '</span><span class="v">' + esc(value) + '</span></div>';
+  }
+
+  function render() {
+    var host = document.getElementById('cp-main');
+    var stats = graph().stats();
+    document.getElementById('cp-chip').textContent = 'v' + stats.version + ' · ' + stats.nodes + 'n/' + stats.edges + 'e';
+    if (section === 'appearance') renderAppearance(host);
+    else if (section === 'graph') renderGraph(host);
+    else if (section === 'storage') renderStorage(host);
+    else renderSystem(host);
+  }
+
+  function renderAppearance(host) {
+    var theme = c.theme();
+    var themeNode = graph().node('svc:theme') || {};
+    host.innerHTML =
+      card('Theme', '' +
+        '<label class="radio"><input type="radio" name="theme" value="dark"' + (theme.mode === 'dark' ? ' checked' : '') + '> Obsidian (dark)</label>' +
+        '<label class="radio"><input type="radio" name="theme" value="xp"' + (theme.mode === 'xp' ? ' checked' : '') + '> Windows XP (classic)</label>' +
+        '<div class="hint" style="margin-top:6px">Theme mode is a property of the <b>svc:theme</b> node in the graph — changing it commits a transaction and every projection (shell, Floret, every app) re-renders.</div>') +
+      card('Wallpaper', '' +
+        '<div class="wall-grid">' + c.kernel.WALLPAPERS.map(function (item, index) {
+          return '<div class="wall-item' + (index === theme.wallpaper ? ' active' : '') + '" data-wall="' + index + '" style="background:' + item.css + '"><span>' + esc(item.name) + '</span></div>';
+        }).join('') + '</div>' +
+        '<div class="row" style="margin-top:8px"><input class="field grow" id="cp-wall-url" placeholder="https://… custom image url" value="' + esc(themeNode.wallpaperUrl || '') + '"><button class="tool" id="cp-wall-apply">Set URL</button><button class="tool" id="cp-wall-clear">Clear</button></div>') +
+      card('Desktop', '' +
+        '<div class="row"><span class="grow">Shortcuts</span><span class="dim mono">' + c.kernel.DESKTOP_ORDER.length + ' apps</span></div>' +
+        '<div class="row"><span class="grow">Windows open now</span><span class="dim mono">' + (c.state.windows ? c.state.windows.length : 0) + '</span></div>' +
+        '<div class="row"><button class="tool" id="cp-cascade">Cascade windows</button><button class="tool" id="cp-tile">Tile windows</button></div>');
+
+    Array.prototype.forEach.call(host.querySelectorAll('input[name=theme]'), function (input) {
+      input.checked = input.value === theme.mode;
+      input.addEventListener('change', function () {
+        c.setTheme(input.value);
+        setStatus('theme → ' + input.value);
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-wall]'), function (item) {
+      item.addEventListener('click', function () {
+        c.setTheme(c.theme().mode, Number(item.dataset.wall));
+        setStatus('wallpaper → ' + c.kernel.WALLPAPERS[Number(item.dataset.wall)].name);
+        render();
+      });
+    });
+    document.getElementById('cp-wall-apply').addEventListener('click', function () {
+      var url = document.getElementById('cp-wall-url').value.trim();
+      if (!url) return;
+      var node = graph().node('svc:theme');
+      c.commit({ label: 'wallpaper url', upsertNodes: { 'svc:theme': Object.assign({}, node, { wallpaperUrl: url }) } });
+      setStatus('custom wallpaper applied');
+    });
+    document.getElementById('cp-wall-clear').addEventListener('click', function () {
+      var node = graph().node('svc:theme');
+      c.commit({ label: 'wallpaper url cleared', upsertNodes: { 'svc:theme': Object.assign({}, node, { wallpaperUrl: null }) } });
+      render();
+    });
+    document.getElementById('cp-cascade').addEventListener('click', function () { c.kernel.bus.emit('Shell', 'cascade-all', {}); });
+    document.getElementById('cp-tile').addEventListener('click', function () { c.kernel.bus.emit('Shell', 'tile-all', {}); });
+    setStatus('appearance — theme ' + theme.mode + ', wallpaper ' + theme.wallpaper);
+  }
+
+  function renderGraph(host) {
+    var stats = graph().stats();
+    c.call('Kernel', 'graph:snapshots').then(function (result) {
+      host.innerHTML =
+        card('Canonical graph', '' +
+          kv('version', stats.version) + kv('nodes', stats.nodes) + kv('edges', stats.edges) +
+          kv('history entries', c.kernel.graph.history.length) + kv('can undo', c.kernel.graph.canUndo) + kv('can redo', c.kernel.graph.canRedo) +
+          kv('storage keys', 'cloudos.graph.v1') +
+          '<div class="row" style="margin-top:8px"><button class="tool" id="cp-undo">↩ Undo</button><button class="tool" id="cp-redo">↪ Redo</button><button class="tool" id="cp-export">Export JSON</button><button class="tool" id="cp-import">Import JSON</button></div>') +
+        card('Snapshots', '' +
+          '<div class="row"><input class="field grow" id="cp-snap-name" placeholder="snapshot name"><button class="tool" id="cp-snap-save">Save</button></div>' +
+          (result.snapshots.length
+            ? result.snapshots.map(function (item) {
+                return '<div class="row"><span class="grow">📸 ' + esc(item.name) + '</span><span class="dim mono">v' + item.version + ' · ' + item.nodes + 'n</span>' +
+                  '<button class="tool" data-restore="' + esc(item.name) + '">Restore</button><button class="tool" data-del="' + esc(item.name) + '">×</button></div>';
+              }).join('')
+            : '<div class="hint">No snapshots yet.</div>') +
+          '<div class="row" style="margin-top:8px"><button class="tool" id="cp-reset" style="border-color:var(--bad);color:var(--bad)">Factory reset (erase graph + files stay)</button></div>') +
+        card('Node types', Object.keys(c.kernel.NODE_STYLE).filter(function (t) { return t !== 'unknown'; }).map(function (type) {
+          var style = c.kernel.NODE_STYLE[type];
+          var count = (stats.byType[type] || 0);
+          return '<div class="row"><span style="color:' + style.color + '">' + style.icon + '</span><span class="grow">' + type + '</span><span class="dim mono">' + count + '</span></div>';
+        }).join(''));
+
+      document.getElementById('cp-undo').addEventListener('click', function () { c.undo(); render(); });
+      document.getElementById('cp-redo').addEventListener('click', function () { c.redo(); render(); });
+      document.getElementById('cp-export').addEventListener('click', function () { CloudOS.download('cloudos-graph.json', c.kernel.graph.exportJSON()); });
+      document.getElementById('cp-import').addEventListener('click', function () {
+        CloudOS.pickFile('application/json').then(function (file) {
+          if (!file) return;
+          file.text().then(function (text) {
+            try {
+              c.kernel.graph.importJSON(text, 'imported ' + file.name);
+              CloudOS.toast('Graph imported', 'good');
+              render();
+            } catch (error) {
+              CloudOS.toast('Import failed: ' + error.message, 'bad');
+            }
+          });
+        });
+      });
+      document.getElementById('cp-snap-save').addEventListener('click', function () {
+        var name = document.getElementById('cp-snap-name').value || 'snapshot ' + new Date().toLocaleTimeString();
+        c.call('Kernel', 'graph:snapshot', { name: name }).then(function () {
+          CloudOS.toast('Snapshot saved: ' + name, 'good');
+          render();
+        });
+      });
+      Array.prototype.forEach.call(host.querySelectorAll('[data-restore]'), function (button) {
+        button.addEventListener('click', function () {
+          c.call('Kernel', 'graph:restore-snapshot', { name: button.dataset.restore }).then(function () {
+            CloudOS.toast('Restored ' + button.dataset.restore, 'good');
+            render();
+          });
+        });
+      });
+      Array.prototype.forEach.call(host.querySelectorAll('[data-del]'), function (button) {
+        button.addEventListener('click', function () {
+          c.call('Kernel', 'graph:delete-snapshot', { name: button.dataset.del }).then(render);
+        });
+      });
+      document.getElementById('cp-reset').addEventListener('click', function () {
+        if (!confirm('Factory reset: erased the persisted graph and reboots the shell. Files in OPFS are not touched.')) return;
+        c.kernel.bus.emit('Shell', 'factory-reset', {});
+      });
+    });
+    setStatus('graph — ' + stats.nodes + ' nodes, ' + stats.edges + ' edges, version ' + stats.version);
+  }
+
+  function renderStorage(host) {
+    c.fs.estimate().then(function (estimate) {
+      var pct = estimate.quota ? Math.min(100, (estimate.usage / estimate.quota) * 100) : 0;
+      host.innerHTML =
+        card('Filesystem', '' +
+          kv('backend', c.fs.kind === 'opfs' ? 'Origin Private File System (real)' : 'in-memory fallback') +
+          kv('policy (read)', (c.fs.policy.read || []).join(', ')) +
+          kv('policy (write)', (c.fs.policy.write || []).join(', ')) +
+          kv('usage', CloudOS.formatBytes(estimate.usage)) +
+          kv('quota', CloudOS.formatBytes(estimate.quota)) +
+          '<div class="meter" style="margin-top:6px"><div style="width:' + pct.toFixed(3) + '%"></div></div>' +
+          '<div class="hint" style="margin-top:6px">Apps are handed a <b>scoped</b> filesystem handle. Notepad may write under <span class="mono">/home</span>; nothing may write to <span class="mono">/system</span> unless the kernel grants it.</div>') +
+        card('Quick access', ['/home', '/home/Documents', '/home/Projects', '/home/Pictures', '/system', '/etc'].map(function (path) {
+          return '<div class="row"><span class="grow mono">' + path + '</span><button class="tool" data-open="' + path + '">Open</button><button class="tool" data-reveal="' + path + '">Floret</button></div>';
+        }).join('')) +
+        card('Indexed files', fileRows());
+      setStatus('storage — ' + CloudOS.formatBytes(estimate.usage) + ' used');
+
+      Array.prototype.forEach.call(host.querySelectorAll('[data-open]'), function (button) {
+        button.addEventListener('click', function () { c.open(button.dataset.open); });
+      });
+      Array.prototype.forEach.call(host.querySelectorAll('[data-reveal]'), function (button) {
+        button.addEventListener('click', function () {
+          c.scan(button.dataset.reveal);
+          c.kernel.bus.emit('Floret', 'map-path', { path: button.dataset.reveal });
+          c.launch('floret');
+        });
+      });
+      Array.prototype.forEach.call(host.querySelectorAll('[data-file]'), function (button) {
+        button.addEventListener('click', function () { c.open(button.dataset.file); });
+      });
+    });
+  }
+
+  function fileRows() {
+    var files = graph().query({ type: 'file' });
+    if (!files.length) return '<div class="hint">Nothing indexed yet — open Floret and expand a directory, or use the Explorer.</div>';
+    return files.map(function (node) {
+      return '<div class="row"><span class="grow mono" style="font-size:10.5px">' + esc(node.path) + '</span>' +
+        '<span class="dim mono">' + CloudOS.formatBytes(node.size || 0) + '</span>' +
+        '<button class="tool" data-file="' + esc(node.path) + '">Open</button></div>';
+    }).join('');
+  }
+
+  function renderSystem(host) {
+    var stats = graph().stats();
+    var busStats = c.kernel.bus.stats();
+    host.innerHTML =
+      card('Kernel', '' +
+        kv('booted', new Date(c.state.bootedAt).toLocaleString()) +
+        kv('uptime', Math.round((Date.now() - c.state.bootedAt) / 1000) + 's') +
+        kv('graph restored', String(c.state.restored)) +
+        kv('fs backend', c.fs.kind) +
+        kv('windows', c.state.windows ? c.state.windows.length : 0) +
+        kv('boot app', (c.state.defaults && c.state.defaults.bootApp) || 'floret')) +
+      card('Event bus', '' +
+        kv('events emitted', busStats.emitted) +
+        kv('listeners', busStats.listenerCount) +
+        kv('rpc handlers', busStats.rpcHandlers) +
+        kv('history size', busStats.history) +
+        Object.keys(busStats.byEvent).sort(function (a, b) { return busStats.byEvent[b] - busStats.byEvent[a]; }).slice(0, 8).map(function (key) {
+          return kv(key, busStats.byEvent[key]);
+        }).join('')) +
+      card('System files', '' +
+        ['/etc/motd', '/system/boot.log', '/system/kernel.json', '/home/Documents/cloud-os-manifesto.md', '/home/Desktop/welcome.md'].map(function (path) {
+          return '<div class="row"><span class="grow mono" style="font-size:10.5px">' + path + '</span><button class="tool" data-np="' + path + '">Notepad</button></div>';
+        }).join('')) +
+      card('Maintenance', '' +
+        '<div class="row"><button class="tool" id="cp-reap">Reap orphaned processes</button><button class="tool" id="cp-relaunch">Reopen boot app</button></div>' +
+        '<div class="hint" style="margin-top:6px">“Reap” deletes process nodes left behind by a shell restart — a single transaction, undoable with Ctrl+Z.</div>' +
+        '<div class="row" style="margin-top:8px"><button class="tool" id="cp-reload">Reload shell</button><button class="tool" id="cp-about">About CloudOS</button></div>');
+
+    document.getElementById('cp-reap').addEventListener('click', function () {
+      var live = {};
+      (c.state.windows || []).forEach(function (win) { live[win.instance] = true; });
+      var orphans = graph().query({ type: 'process', where: function (node) { return node.appId && !live[node.instance]; } }).map(function (node) { return node.id; });
+      if (!orphans.length) {
+        setStatus('no orphaned processes');
+        return;
+      }
+      c.commit({ label: 'reap orphaned processes', deleteNodes: orphans });
+      setStatus('reaped ' + orphans.length + ' process nodes');
+      render();
+    });
+    document.getElementById('cp-relaunch').addEventListener('click', function () {
+      c.launch((c.state.defaults && c.state.defaults.bootApp) || 'floret');
+    });
+    document.getElementById('cp-reload').addEventListener('click', function () {
+      c.kernel.bus.emit('Shell', 'reload', {});
+    });
+    document.getElementById('cp-about').addEventListener('click', function () { c.launch('about'); });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-np]'), function (button) {
+      button.addEventListener('click', function () { c.launch('notepad', { file: button.dataset.np }); });
+    });
+    setStatus('system — kernel up ' + Math.round((Date.now() - c.state.bootedAt) / 1000) + 's, ' + busStats.emitted + ' bus events');
+  }
+
+  CloudOS.whenReady(function () {
+    CloudOS.connect('controlpanel').then(function (client) {
+      c = client;
+      CloudOS.bindTheme(c);
+
+      document.getElementById('cp-menu').appendChild(CloudOS.makeMenuBar({
+        File: [
+          { label: 'Open Explorer', run: function () { c.launch('explorer'); } },
+          { label: 'Open Graph Store', run: function () { c.launch('inspector'); } },
+          { separator: true },
+          { label: 'Close', run: function () { c.close(); } },
+        ],
+        View: [
+          { label: 'Appearance', run: function () { section = 'appearance'; render(); } },
+          { label: 'Graph', run: function () { section = 'graph'; render(); } },
+          { label: 'Storage', run: function () { section = 'storage'; render(); } },
+          { label: 'System', run: function () { section = 'system'; render(); } },
+        ],
+      }).bar);
+
+      var buttons = { appearance: 'cp-appearance', graph: 'cp-graph', storage: 'cp-storage', system: 'cp-system' };
+      Object.keys(buttons).forEach(function (key) {
+        document.getElementById(buttons[key]).addEventListener('click', function () {
+          section = key;
+          render();
+        });
+      });
+
+      c.onGraph(function () { render(); });
+      c.onTheme(function () { if (section === 'appearance') render(); });
+      render();
+      c.setStatus('Control Panel ready');
+    }).catch(function (error) {
+      document.body.innerHTML = '<div class="empty">Control Panel could not attach to the kernel.<br>' + esc(error.message) + '</div>';
+    });
+  });
+})();
+</script>
+</body>
+</html>

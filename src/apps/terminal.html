@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--cloudos-head-->
+<meta charset="utf-8">
+<title>Terminal</title>
+<style>
+  #tm-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--panel-solid); }
+  #tm-out { flex: 1; min-height: 0; overflow: auto; padding: 8px 10px; font-family: var(--mono); font-size: 12px; line-height: 1.5; user-select: text; }
+  .tm-line { white-space: pre-wrap; word-break: break-word; }
+  .tm-echo { color: var(--accent); }
+  .tm-err { color: var(--bad); }
+  .tm-ok { color: var(--good); }
+  .tm-dim { color: var(--text-dim); }
+  .tm-warn { color: var(--warn); }
+  .tm-head { color: var(--text-strong); font-weight: 600; }
+  #tm-row { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--border); background: var(--bg-alt); }
+  #tm-prompt { color: var(--good); font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+  #tm-in { flex: 1; background: transparent; border: 0; outline: none; color: var(--text); font-family: var(--mono); font-size: 12px; user-select: text; }
+</style>
+</head>
+<body class="os-app">
+  <div id="tm-menu"></div>
+  <div class="toolbar">
+    <span class="chip">⌨️ KERNEL SHELL</span>
+    <span class="tool-sep"></span>
+    <button class="tool" id="tm-help">help</button>
+    <button class="tool" id="tm-clear">clear</button>
+    <button class="tool" id="tm-tail">tail bus: off</button>
+    <span class="spacer"></span>
+    <span class="chip" id="tm-ver">v0</span>
+  </div>
+  <div id="tm-wrap">
+    <div id="tm-out"></div>
+    <div id="tm-row">
+      <span id="tm-prompt">cloudos /$</span>
+      <input id="tm-in" autocomplete="off" spellcheck="false" placeholder="type 'help'">
+    </div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+  var c = null;
+  var cwd = '/';
+  var out, input, promptEl, verEl;
+  var commandHistory = [];
+  var historyIndex = -1;
+  var tailing = false;
+  var offTail = null;
+
+  function print(text, cls) {
+    var line = document.createElement('div');
+    line.className = 'tm-line' + (cls ? ' ' + cls : '');
+    line.textContent = text == null ? '' : String(text);
+    out.appendChild(line);
+    out.scrollTop = out.scrollHeight;
+    return line;
+  }
+
+  function printLines(lines, cls) {
+    (Array.isArray(lines) ? lines : [lines]).forEach(function (line) {
+      print(line, cls);
+    });
+  }
+
+  function error(message) {
+    print(String(message), 'tm-err');
+  }
+
+  function fmtNode(node) {
+    return node.type.padEnd(8) + ' ' + (node.name || node.path || node.id).padEnd(26) + ' ' + node.id;
+  }
+
+  function resolve(path) {
+    if (!path) return cwd;
+    if (path === '~') return '/home';
+    if (path.charAt(0) === '/') return c.fs.normalize(path);
+    return c.fs.join(cwd, path);
+  }
+
+  function tokenize(line) {
+    var tokens = [];
+    var current = '';
+    var quote = null;
+    for (var i = 0; i < line.length; i++) {
+      var ch = line.charAt(i);
+      if (quote) {
+        if (ch === quote) quote = null;
+        else current += ch;
+      } else if (ch === '"' || ch === "'") {
+        quote = ch;
+      } else if (/\s/.test(ch)) {
+        if (current) {
+          tokens.push(current);
+          current = '';
+        }
+      } else {
+        current += ch;
+      }
+    }
+    if (current) tokens.push(current);
+    return tokens;
+  }
+
+  var commands = {
+    help: function () {
+      printLines([
+        'CloudOS kernel shell — every command drives the graph or the mounted filesystem.',
+        '',
+        'FILESYSTEM   ls [path] · cd <path> · pwd · cat <file> · stat <path> · mkdir <path> ·',
+        '             rm <path> · write <path> <text> · scan <path> · open <path> · df',
+        'GRAPH        nodes [type] · edges [kind] · node <id> · query <type> · link <a> <b> [kind] ·',
+        '             unlink <edgeId> · del <nodeId> · patch <id> <key>=<value> · add <type> <name>',
+        'TRANSACTIONS tx · undo · redo · jump <n> · snapshots · snapshot <name> · restore <name> · export',
+        'RUNTIME      ps · kill <pid|instance> · windows · launch <app> · apps · bus [n] · stats · tail ·',
+        '             theme [dark|xp] · wallpaper [n] · wallpapers',
+        'SYSTEM       whoami · date · echo <text> · clear · about',
+      ], 'tm-dim');
+      return;
+    },
+
+    ls: function (args) {
+      var path = resolve(args[0]);
+      return c.fs.list(path).then(function (list) {
+        if (!list.length) return print('(empty)', 'tm-dim');
+        printLines(list.map(function (entry) {
+          return entry.icon + ' ' + entry.name.padEnd(28) + (entry.kind === 'dir' ? '<dir>' : CloudOS.formatBytes(entry.size).padStart(9)) + '  ' + (entry.mtime ? CloudOS.relTime(entry.mtime) : '');
+        }));
+        print(list.length + ' entries in ' + path, 'tm-dim');
+      });
+    },
+
+    cd: function (args) {
+      var path = resolve(args[0] || '/');
+      return c.fs.isDir(path).then(function (isDir) {
+        if (!isDir) return error('not a directory: ' + path);
+        cwd = path;
+        updatePrompt();
+        print('cwd -> ' + cwd, 'tm-dim');
+      });
+    },
+
+    pwd: function () {
+      print(cwd);
+    },
+
+    cat: function (args) {
+      if (!args[0]) return error('usage: cat <file>');
+      var path = resolve(args[0]);
+      return c.fs.readText(path).then(function (text) {
+        printLines(text.split('\n'));
+        print('— ' + path + ' (' + text.length + ' bytes)', 'tm-dim');
+      });
+    },
+
+    stat: function (args) {
+      if (!args[0]) return error('usage: stat <path>');
+      var path = resolve(args[0]);
+      return c.fs.stat(path).then(function (info) {
+        if (!info) return error('no such file: ' + path);
+        var store = c.graph();
+        var node = store.node((info.kind === 'dir' ? 'dir:' : 'file:') + path);
+        print('path      ' + path);
+        print('kind      ' + info.kind);
+        print('size      ' + CloudOS.formatBytes(info.size));
+        print('modified  ' + (info.mtime ? new Date(info.mtime).toLocaleString() : '-'));
+        print('node      ' + (node ? node.id : '(not indexed — run: scan ' + (path.slice(0, path.lastIndexOf('/')) || '/') + ')'));
+      });
+    },
+
+    mkdir: function (args) {
+      if (!args[0]) return error('usage: mkdir <path>');
+      return c.fs.mkdir(resolve(args[0])).then(function (path) {
+        print('created ' + path, 'tm-ok');
+      });
+    },
+
+    rm: function (args) {
+      if (!args[0]) return error('usage: rm <path>');
+      return c.fs.remove(resolve(args[0])).then(function (path) {
+        print('removed ' + path, 'tm-ok');
+      });
+    },
+
+    write: function (args) {
+      if (args.length < 2) return error('usage: write <path> <text>');
+      var path = resolve(args[0]);
+      var text = args.slice(1).join(' ');
+      return c.fs.writeText(path, text).then(function () {
+        print('wrote ' + text.length + ' bytes to ' + path, 'tm-ok');
+      });
+    },
+
+    scan: function (args) {
+      var path = resolve(args[0] || cwd);
+      print('scanning ' + path + '…', 'tm-dim');
+      return c.scan(path).then(function (result) {
+        if (!result.ok) return error(result.error);
+        print('indexed ' + result.count + ' entries as ' + result.ids.length + ' nodes (' + result.dirId + ')', 'tm-ok');
+      });
+    },
+
+    open: function (args) {
+      if (!args[0]) return error('usage: open <path>');
+      return c.open(resolve(args[0])).then(function (result) {
+        print('opened with ' + result.app + ': ' + result.path, 'tm-ok');
+      });
+    },
+
+    df: function () {
+      return c.fs.estimate().then(function (estimate) {
+        var pct = estimate.quota ? ((estimate.usage / estimate.quota) * 100).toFixed(3) : '?';
+        print('filesystem : ' + c.fs.kind + ' (origin private file system)');
+        print('usage      : ' + CloudOS.formatBytes(estimate.usage) + ' / ' + CloudOS.formatBytes(estimate.quota) + '  (' + pct + '%)');
+      });
+    },
+
+    nodes: function (args) {
+      var store = c.graph();
+      var list = args[0] ? store.query({ type: args[0] }) : Object.keys(store.nodes).map(function (id) { return store.nodes[id]; });
+      printLines(list.map(fmtNode));
+      print(list.length + ' nodes', 'tm-dim');
+    },
+
+    edges: function (args) {
+      var store = c.graph();
+      var list = Object.keys(store.edges).map(function (id) { return store.edges[id]; });
+      if (args[0]) list = list.filter(function (edge) { return edge.kind === args[0]; });
+      printLines(list.map(function (edge) {
+        return edge.kind.padEnd(13) + ' ' + edge.from + '  →  ' + edge.to;
+      }));
+      print(list.length + ' edges', 'tm-dim');
+    },
+
+    node: function (args) {
+      if (!args[0]) return error('usage: node <id>');
+      var store = c.graph();
+      var node = store.node(args[0]);
+      if (!node) return error('no node: ' + args[0]);
+      Object.keys(node).forEach(function (key) {
+        var value = node[key];
+        if (value && typeof value === 'object') value = JSON.stringify(value);
+        print(key.padEnd(12) + ' ' + value);
+      });
+      print('', 'tm-dim');
+      store.edgesFrom(node.id).forEach(function (edge) { print('→ ' + edge.kind + ' ' + edge.to, 'tm-dim'); });
+      store.edgesTo(node.id).forEach(function (edge) { print('← ' + edge.kind + ' ' + edge.from, 'tm-dim'); });
+    },
+
+    query: function (args) {
+      if (!args[0]) return error('usage: query <type>');
+      return commands.nodes(args);
+    },
+
+    add: function (args) {
+      if (args.length < 2) return error('usage: add <type> <name>');
+      var type = args[0];
+      var name = args.slice(1).join(' ');
+      var id = type + ':' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + ':' + Math.floor(Math.random() * 1e4).toString(36);
+      var patch = {};
+      patch[id] = { id: id, type: type, name: name, createdBy: 'terminal' };
+      try {
+        c.commit({ label: 'add ' + id, upsertNodes: patch });
+        print('created ' + id, 'tm-ok');
+      } catch (err) {
+        error(err.message);
+      }
+    },
+
+    link: function (args) {
+      if (args.length < 2) return error('usage: link <from> <to> [kind]');
+      var kind = args[2] || 'communicates';
+      var id = 'e:' + args[0] + '->' + args[1] + ':' + kind;
+      var edges = {};
+      edges[id] = { id: id, from: args[0], to: args[1], kind: kind };
+      try {
+        c.commit({ label: 'link ' + args[0] + ' -> ' + args[1], upsertEdges: edges });
+        print('linked ' + args[0] + ' -[' + kind + ']-> ' + args[1], 'tm-ok');
+      } catch (err) {
+        error(err.message);
+      }
+    },
+
+    unlink: function (args) {
+      if (!args[0]) return error('usage: unlink <edgeId>');
+      try {
+        c.commit({ label: 'unlink ' + args[0], deleteEdges: [args[0]] });
+        print('removed edge ' + args[0], 'tm-ok');
+      } catch (err) {
+        error(err.message);
+      }
+    },
+
+    del: function (args) {
+      if (!args[0]) return error('usage: del <nodeId>');
+      try {
+        c.commit({ label: 'delete ' + args[0], deleteNodes: [args[0]] });
+        print('deleted ' + args[0], 'tm-ok');
+      } catch (err) {
+        error(err.message);
+      }
+    },
+
+    patch: function (args) {
+      if (args.length < 2) return error('usage: patch <id> <key>=<value>');
+      var store = c.graph();
+      var node = store.node(args[0]);
+      if (!node) return error('no node: ' + args[0]);
+      var patchObject = {};
+      args.slice(1).forEach(function (pair) {
+        var eq = pair.indexOf('=');
+        if (eq < 0) return;
+        var key = pair.slice(0, eq);
+        var raw = pair.slice(eq + 1);
+        patchObject[key] = /^-?\d+(\.\d+)?$/.test(raw) ? Number(raw) : (raw === 'true' ? true : raw === 'false' ? false : raw);
+      });
+      var patch = {};
+      patch[node.id] = Object.assign({}, node, patchObject);
+      c.commit({ label: 'patch ' + node.id, upsertNodes: patch });
+      print('patched ' + node.id + ' → ' + JSON.stringify(patchObject), 'tm-ok');
+    },
+
+    ps: function () {
+      var store = c.graph();
+      var list = store.query({ type: 'process' });
+      print('#'.padEnd(6) + 'pid'.padEnd(6) + 'status'.padEnd(11) + 'name'.padEnd(24) + 'node');
+      list.forEach(function (node) {
+        print(('-').padEnd(6) + String(node.pid || '-').padEnd(6) + String(node.status || '-').padEnd(11) + String(node.name || '').slice(0, 23).padEnd(24) + node.id);
+      });
+      print(list.length + ' processes', 'tm-dim');
+    },
+
+    kill: function (args) {
+      if (!args[0]) return error('usage: kill <pid|instance>');
+      var store = c.graph();
+      var target = null;
+      store.query({ type: 'process' }).forEach(function (node) {
+        if (String(node.pid) === args[0] || node.instance === args[0] || node.id === args[0]) target = node;
+      });
+      if (!target) return error('no process matching ' + args[0]);
+      if (target.instance) {
+        c.kernel.bus.emit('Shell', 'close-app', { instance: target.instance });
+        print('closing window of ' + target.name + ' (' + target.instance + ')', 'tm-warn');
+      } else {
+        c.commit({ label: 'kill ' + target.id, deleteNodes: [target.id] });
+        print('killed ' + target.id, 'tm-ok');
+      }
+    },
+
+    windows: function () {
+      var store = c.graph();
+      var list = store.query({ type: 'window' });
+      list.forEach(function (node) {
+        print(node.id.padEnd(34) + String(node.appId).padEnd(12) + (node.file || '-'));
+      });
+      print(list.length + ' window nodes', 'tm-dim');
+    },
+
+    launch: function (args) {
+      if (!args[0]) return error('usage: launch <app>');
+      c.launch(args[0], args[1] ? { file: resolve(args[1]) } : {});
+      print('launching ' + args[0], 'tm-ok');
+    },
+
+    apps: function () {
+      var registry = c.kernel.APPS;
+      Object.keys(registry).forEach(function (id) {
+        var meta = registry[id];
+        print(meta.icon + ' ' + id.padEnd(14) + meta.title.padEnd(18) + (meta.blurb || ''));
+      });
+    },
+
+    tx: function () {
+      return c.call('Kernel', 'graph:history').then(function (result) {
+        result.entries.forEach(function (entry) {
+          print((entry.current ? '▶ ' : '  ') + String(entry.index).padStart(3) + '  v' + String(entry.version).padStart(4) + '  ' + String(entry.nodes).padStart(4) + ' nodes  ' + entry.label + '  ' + CloudOS.clockTime(entry.at));
+        });
+        print(result.entries.length + ' entries · canUndo=' + result.canUndo + ' canRedo=' + result.canRedo, 'tm-dim');
+      });
+    },
+
+    undo: function () {
+      c.undo();
+      print('undo → graph v' + c.graph().version, 'tm-ok');
+    },
+
+    redo: function () {
+      c.redo();
+      print('redo → graph v' + c.graph().version, 'tm-ok');
+    },
+
+    jump: function (args) {
+      var index = parseInt(args[0], 10);
+      if (isNaN(index)) return error('usage: jump <historyIndex>');
+      return c.call('Kernel', 'graph:jump', { index: index }).then(function (result) {
+        print('time travelled to index ' + index + ' (v' + result.version + ')', 'tm-warn');
+      });
+    },
+
+    snapshot: function (args) {
+      var name = args.join(' ') || 'cli ' + new Date().toLocaleTimeString();
+      return c.call('Kernel', 'graph:snapshot', { name: name }).then(function () {
+        print('snapshot saved: ' + name, 'tm-ok');
+      });
+    },
+
+    snapshots: function () {
+      return c.call('Kernel', 'graph:snapshots').then(function (result) {
+        if (!result.snapshots.length) return print('(no snapshots)', 'tm-dim');
+        result.snapshots.forEach(function (item) {
+          print(item.name.padEnd(30) + ' v' + String(item.version).padStart(4) + '  ' + String(item.nodes).padStart(4) + ' nodes  ' + CloudOS.clockTime(item.at));
+        });
+      });
+    },
+
+    restore: function (args) {
+      if (!args.length) return error('usage: restore <snapshotName>');
+      return c.call('Kernel', 'graph:restore-snapshot', { name: args.join(' ') }).then(function (result) {
+        print(result.ok ? 'restored ' + args.join(' ') : 'snapshot not found', result.ok ? 'tm-ok' : 'tm-err');
+      });
+    },
+
+    export: function () {
+      CloudOS.download('cloudos-graph.json', c.kernel.graph.exportJSON());
+      print('graph exported to cloudos-graph.json', 'tm-ok');
+    },
+
+    bus: function (args) {
+      var count = parseInt(args[0], 10) || 16;
+      var history = c.kernel.bus.history.slice(-count);
+      history.forEach(function (env) {
+        var payload = env.payload && env.payload.__truncated ? '[big payload ' + env.payload.bytes + 'b]' : JSON.stringify(env.payload);
+        print(CloudOS.clockTime(env.at) + '  ' + (env.scope + ':' + env.event).padEnd(34) + String(payload).slice(0, 90), 'tm-dim');
+      });
+      print(history.length + ' of ' + c.kernel.bus.history.length + ' events', 'tm-dim');
+    },
+
+    stats: function () {
+      return c.call('Kernel', 'stats').then(function (result) {
+        print('graph    v' + result.graph.version + ' · ' + result.graph.nodes + ' nodes · ' + result.graph.edges + ' edges');
+        print('types    ' + Object.keys(result.graph.byType).map(function (t) { return t + ':' + result.graph.byType[t]; }).join(' '));
+        print('kinds    ' + Object.keys(result.graph.byKind).map(function (k) { return k + ':' + result.graph.byKind[k]; }).join(' '));
+        print('bus      ' + result.bus.emitted + ' emitted · ' + result.bus.listenerCount + ' listeners · ' + result.bus.history + ' in history');
+        print('runtime  fs=' + result.fs + ' · uptime=' + Math.round(result.uptime / 1000) + 's · windows=' + result.windows);
+      });
+    },
+
+    tail: function () {
+      tailing = !tailing;
+      document.getElementById('tm-tail').textContent = 'tail bus: ' + (tailing ? 'on' : 'off');
+      if (tailing) {
+        if (!offTail) {
+          offTail = c.onLog(function (env) {
+            print(CloudOS.clockTime(env.at) + '  ' + env.scope + ':' + env.event, 'tm-dim');
+          });
+        }
+        print('tailing bus — type tail again to stop', 'tm-warn');
+      } else if (offTail) {
+        offTail();
+        offTail = null;
+        print('tail stopped', 'tm-dim');
+      }
+    },
+
+    theme: function (args) {
+      if (!args[0]) return print('current theme: ' + c.theme().mode);
+      c.setTheme(args[0]);
+      print('theme → ' + c.theme().mode, 'tm-ok');
+    },
+
+    wallpaper: function (args) {
+      var index = args[0] === undefined ? c.theme().wallpaper + 1 : parseInt(args[0], 10);
+      c.setTheme(c.theme().mode, index);
+      print('wallpaper index → ' + c.theme().wallpaper + ' (' + c.kernel.WALLPAPERS[c.theme().wallpaper].name + ')', 'tm-ok');
+    },
+
+    wallpapers: function () {
+      c.kernel.WALLPAPERS.forEach(function (item, index) {
+        print(String(index).padStart(2) + '  ' + item.name + (index === c.theme().wallpaper ? '   ← current' : ''));
+      });
+    },
+
+    whoami: function () {
+      print('cloudos user@subkernel  ·  fs=' + c.fs.kind + '  ·  graph v' + c.graph().version);
+    },
+
+    date: function () {
+      print(new Date().toString());
+    },
+
+    echo: function (args) {
+      print(args.join(' '));
+    },
+
+    clear: function () {
+      out.innerHTML = '';
+    },
+
+    about: function () {
+      printLines([
+        'CloudOS — a nodegraph operating system.',
+        'The graph is the truth: ' + c.graph().stats().nodes + ' nodes, ' + c.graph().stats().edges + ' edges, version ' + c.graph().version + '.',
+        'Windows, files, apps and processes are projections of it. Try:',
+        '  nodes process        see every running process node',
+        '  edges owns           see which processes own which windows',
+        '  undo                 roll the whole OS back one transaction',
+        '  open /home/Documents/cloud-os-manifesto.md',
+      ], 'tm-dim');
+    },
+  };
+
+  function execute(line) {
+    var trimmed = line.trim();
+    if (!trimmed) return;
+    print(cwd + '$ ' + trimmed, 'tm-echo');
+    commandHistory.push(trimmed);
+    historyIndex = commandHistory.length;
+    var tokens = tokenize(trimmed);
+    var name = tokens[0];
+    var handler = commands[name];
+    if (!handler) {
+      error('unknown command: ' + name + '   (try: help)');
+      return;
+    }
+    try {
+      var result = handler(tokens.slice(1));
+      if (result && result.catch) {
+        result.catch(function (err) {
+          error(err.message || String(err));
+        });
+      }
+    } catch (err) {
+      error(err.message || String(err));
+    }
+  }
+
+  function updatePrompt() {
+    promptEl.textContent = 'cloudos ' + cwd + '$';
+    verEl.textContent = 'v' + c.graph().version;
+  }
+
+  function complete(value) {
+    var tokens = value.split(' ');
+    var last = tokens[tokens.length - 1];
+    if (tokens.length === 1) {
+      var matches = Object.keys(commands).filter(function (name) { return name.indexOf(last) === 0; });
+      if (matches.length === 1) return matches[0] + ' ';
+      if (matches.length > 1) {
+        print(matches.join('  '), 'tm-dim');
+      }
+      return value;
+    }
+    return value + ' ';
+  }
+
+  CloudOS.whenReady(function () {
+    out = document.getElementById('tm-out');
+    input = document.getElementById('tm-in');
+    promptEl = document.getElementById('tm-prompt');
+    verEl = document.getElementById('tm-ver');
+
+    CloudOS.connect('terminal').then(function (client) {
+      c = client;
+      CloudOS.bindTheme(c);
+
+      document.getElementById('tm-menu').appendChild(CloudOS.makeMenuBar({
+        Shell: [
+          { label: 'Clear', run: function () { out.innerHTML = ''; } },
+          { label: 'Show help', run: function () { execute('help'); } },
+          { separator: true },
+          { label: 'Close', run: function () { c.close(); } },
+        ],
+        Graph: [
+          { label: 'Transaction log', run: function () { execute('tx'); } },
+          { label: 'Undo', run: function () { execute('undo'); } },
+          { label: 'Redo', run: function () { execute('redo'); } },
+          { separator: true },
+          { label: 'Snapshot now', run: function () { execute('snapshot'); } },
+          { label: 'Export graph JSON', run: function () { execute('export'); } },
+        ],
+        View: [
+          { label: 'Toggle dark / XP', run: function () { c.setTheme(c.theme().mode === 'xp' ? 'dark' : 'xp'); } },
+          { label: 'Next wallpaper', run: function () { execute('wallpaper'); } },
+        ],
+      }).bar);
+
+      document.getElementById('tm-help').addEventListener('click', function () { execute('help'); });
+      document.getElementById('tm-clear').addEventListener('click', function () { out.innerHTML = ''; });
+      document.getElementById('tm-tail').addEventListener('click', function () { execute('tail'); });
+
+      input.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          var value = input.value;
+          input.value = '';
+          execute(value);
+          updatePrompt();
+        } else if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          if (historyIndex > 0) {
+            historyIndex--;
+            input.value = commandHistory[historyIndex] || '';
+          }
+        } else if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          if (historyIndex < commandHistory.length - 1) {
+            historyIndex++;
+            input.value = commandHistory[historyIndex] || '';
+          } else {
+            historyIndex = commandHistory.length;
+            input.value = '';
+          }
+        } else if (event.key === 'Tab') {
+          event.preventDefault();
+          input.value = complete(input.value);
+        } else if (event.key === 'l' && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          out.innerHTML = '';
+        }
+      });
+
+      document.getElementById('tm-wrap').addEventListener('click', function (event) {
+        if (!window.getSelection().toString()) input.focus();
+      });
+
+      c.onGraph(function () { updatePrompt(); });
+
+      printLines([
+        'CloudOS kernel shell — graph v' + c.graph().version + ', ' + c.graph().stats().nodes + ' nodes, fs=' + c.fs.kind,
+        "Type 'help' for the command list.",
+      ], 'tm-dim');
+      updatePrompt();
+      input.focus();
+      c.setStatus('Terminal attached to kernel');
+    }).catch(function (error) {
+      document.body.innerHTML = '<div class="empty">Terminal could not attach to the kernel.<br>' + CloudOS.escapeHtml(error.message) + '</div>';
+    });
+  });
+})();
+</script>
+</body>
+</html>

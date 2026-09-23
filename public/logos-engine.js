@@ -18,7 +18,7 @@ let pane     = 'chat';
 
 const CFG_KEY = 'logos_cfg';
 const cfg = Object.assign({
-  provider: 'openrouter', model: 'gemma4:cloud', endpoint: '', apikey: '',
+  provider: 'gemini', model: 'gemini-3.8-flash', endpoint: '', apikey: '',
   tools: true, auto: false, maxSteps: 8, confirmWrites: true
 }, JSON.parse(localStorage.getItem(CFG_KEY) || '{}'));
 
@@ -220,6 +220,20 @@ async function complete(msgs) {
   if (p === 'gemini') {
     const sys = msgs.find(m => m.role === 'system');
     const rest = msgs.filter(m => m.role !== 'system');
+    if (!cfg.apikey) {
+      const r = await fetchJSON('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: model || 'gemini-3.8-flash',
+          systemInstruction: sys ? sys.content : undefined,
+          messages: rest.map(m => ({ role: m.role, content: m.content })),
+        })
+      });
+      if (!r.ok) throw new Error(`gemini /api/gemini ${r.status}`);
+      const j = await r.json();
+      return j.text || '';
+    }
     const r = await fetchJSON(`${ENDPOINTS.gemini}/${model}:generateContent?key=${cfg.apikey}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -1,0 +1,8 @@
+{
+  "name": "CloudOS",
+  "description": "Spatial node-graph operating system with Origin Private File System, persistent taskbar state, Floret graph visualizer, and Logos AI subkernel intelligence.",
+  "prompt": "Extend the taskbar state management to save open task tabs to localStorage, ensuring they persist across page refreshes. Then let's link AI abilities, see Logos and modify according to the new spec for floret.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

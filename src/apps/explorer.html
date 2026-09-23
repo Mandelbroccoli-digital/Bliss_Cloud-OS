@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--cloudos-head-->
+<meta charset="utf-8">
+<title>Explorer</title>
+<style>
+  #ex-tree { max-width: 220px; min-width: 150px; border-right: 1px solid var(--border); overflow: auto; padding: 6px 4px; }
+  #ex-list { padding: 4px; }
+  .ex-row { display: grid; grid-template-columns: 20px 1fr 84px 132px; align-items: center; gap: 8px; padding: 3px 8px; border-radius: 4px; cursor: default; font-size: 11.5px; }
+  .ex-row:hover { background: var(--accent-soft); }
+  .ex-row.selected { background: var(--accent); color: #fff; }
+  .ex-row .sz, .ex-row .mt { font-family: var(--mono); font-size: 10px; color: var(--text-dim); text-align: right; }
+  .ex-row.selected .sz, .ex-row.selected .mt { color: rgba(255,255,255,.8); }
+  .tree-node { font-size: 11px; }
+  .tree-row { display: flex; align-items: center; gap: 4px; padding: 2px 5px; border-radius: 3px; cursor: pointer; white-space: nowrap; }
+  .tree-row:hover { background: var(--accent-soft); }
+  .tree-row.active { background: var(--accent); color: #fff; }
+  .tree-kids { margin-left: 12px; border-left: 1px dotted var(--border); padding-left: 3px; }
+  .crumb { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+</style>
+</head>
+<body class="os-app">
+  <div id="ex-menu"></div>
+  <div class="toolbar">
+    <button class="tool" id="ex-back" title="Back">⬅</button>
+    <button class="tool" id="ex-up" title="Up one level">⬆</button>
+    <input class="field" id="ex-path" style="flex:1;min-width:120px" value="/">
+    <button class="tool" id="ex-go">Go</button>
+    <span class="tool-sep"></span>
+    <button class="tool" id="ex-mkdir">New folder</button>
+    <button class="tool" id="ex-mkfile">New file</button>
+    <button class="tool" id="ex-rename">Rename</button>
+    <button class="tool" id="ex-del">Delete</button>
+    <button class="tool" id="ex-refresh">Refresh</button>
+    <span class="spacer"></span>
+    <button class="tool" id="ex-floret">Reveal in Floret</button>
+  </div>
+  <div class="body-split">
+    <div id="ex-tree" class="pane"></div>
+    <div class="pane">
+      <div class="pane-scroll" id="ex-list"></div>
+    </div>
+  </div>
+  <div class="statusbar">
+    <span id="ex-status">ready</span>
+    <span id="ex-right"></span>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+  var c = null;
+  var cwd = '/';
+  var history = [];
+  var entries = [];
+  var selected = null;
+  var view = { tree: null, expanded: new Set(['/']) };
+
+  function esc(v) { return CloudOS.escapeHtml(v); }
+
+  function join(base, name) { return (base === '/' ? '' : base) + '/' + name; }
+
+  function setStatus(text) {
+    document.getElementById('ex-status').textContent = text;
+  }
+
+  function navigate(path, pushHistory) {
+    path = path || '/';
+    c.fs.isDir(path).then(function (isDir) {
+      if (!isDir) {
+        c.open(path);
+        return;
+      }
+      if (pushHistory !== false) history.push(cwd);
+      cwd = path;
+      document.getElementById('ex-path').value = path;
+      refresh();
+    });
+  }
+
+  function refresh() {
+    return c.fs.list(cwd).then(function (list) {
+      entries = list;
+      renderList();
+      renderTree();
+      c.fs.estimate().then(function (estimate) {
+        document.getElementById('ex-right').textContent =
+          list.length + ' items · ' + CloudOS.formatBytes(estimate.usage) + ' used' +
+          (estimate.quota ? ' of ' + CloudOS.formatBytes(estimate.quota) : '');
+      });
+      setStatus(cwd + ' — ' + entries.filter(function (e) { return e.kind === 'dir'; }).length + ' folders, ' +
+        entries.filter(function (e) { return e.kind === 'file'; }).length + ' files');
+      selected = null;
+    });
+  }
+
+  function renderList() {
+    var host = document.getElementById('ex-list');
+    host.innerHTML = '';
+    if (!entries.length) {
+      host.innerHTML = '<div class="empty">This folder is empty.<br>Use <b>New file</b> to create something — it is written to the real OPFS filesystem and indexed into the graph.</div>';
+      return;
+    }
+    entries.forEach(function (entry) {
+      var row = document.createElement('div');
+      row.className = 'ex-row';
+      row.innerHTML = '<span></span><span class="nm"></span><span class="sz"></span><span class="mt"></span>';
+      row.children[0].textContent = entry.icon;
+      row.children[1].textContent = entry.name;
+      row.children[2].textContent = entry.kind === 'dir' ? '<DIR>' : CloudOS.formatBytes(entry.size);
+      row.children[3].textContent = entry.kind === 'dir' ? '' : CloudOS.relTime(entry.mtime);
+      row.addEventListener('click', function (event) {
+        event.stopPropagation();
+        selected = entry;
+        Array.prototype.forEach.call(host.children, function (child) { child.classList.remove('selected'); });
+        row.classList.add('selected');
+        setStatus(entry.path + (entry.kind === 'file' ? ' · ' + CloudOS.formatBytes(entry.size) : ''));
+      });
+      row.addEventListener('dblclick', function () {
+        if (entry.kind === 'dir') navigate(entry.path);
+        else c.open(entry.path);
+      });
+      row.addEventListener('contextmenu', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        selected = entry;
+        var shell = c.kernel.bus;
+        shell.emit('Shell', 'status', { text: entry.path });
+        contextMenu(entry, event.clientX, event.clientY);
+      });
+      host.appendChild(row);
+    });
+    host.addEventListener('click', function () {
+      selected = null;
+      Array.prototype.forEach.call(host.children, function (child) { child.classList.remove('selected'); });
+    });
+  }
+
+  function contextMenu(entry, x, y) {
+    var host = document.createElement('div');
+    host.className = 'fl-overlay';
+    host.style.cssText = 'position:fixed;z-index:900;background:var(--panel-solid);border:1px solid var(--border-strong);border-radius:5px;padding:4px;box-shadow:0 12px 28px rgba(0,0,0,.5);min-width:190px;font-size:11px';
+    var items = [];
+    if (entry.kind === 'dir') {
+      items.push({ label: '📂 Open', run: function () { navigate(entry.path); } });
+    } else {
+      items.push({ label: '👁️ Open', run: function () { c.open(entry.path); } });
+      items.push({ label: '📝 Edit in Notepad', run: function () { c.launch('notepad', { file: entry.path }); } });
+    }
+    items.push(
+      { label: '🌸 Reveal in Floret', run: function () { revealInFloret(entry.path); } },
+      { label: '🕸️ Show node in Graph Store', run: function () { c.launch('inspector'); } },
+      { label: '📋 Copy path', run: function () { if (navigator.clipboard) navigator.clipboard.writeText(entry.path); setStatus('copied ' + entry.path); } },
+      { label: '🗑️ Delete', run: function () { remove(entry); } }
+    );
+    items.forEach(function (item) {
+      var row = document.createElement('div');
+      row.className = 'list-row';
+      row.textContent = item.label;
+      row.addEventListener('click', function () {
+        host.remove();
+        item.run();
+      });
+      host.appendChild(row);
+    });
+    host.style.left = Math.min(x, window.innerWidth - 210) + 'px';
+    host.style.top = Math.min(y, window.innerHeight - host.offsetHeight - 8) + 'px';
+    document.body.appendChild(host);
+    setTimeout(function () {
+      document.addEventListener('pointerdown', function close(event) {
+        if (!host.contains(event.target)) {
+          host.remove();
+          document.removeEventListener('pointerdown', close);
+        }
+      });
+    }, 0);
+  }
+
+  function revealInFloret(path) {
+    var dir = path;
+    c.fs.isDir(path).then(function (isDir) {
+      if (!isDir) dir = path.slice(0, path.lastIndexOf('/')) || '/';
+      c.scan(dir).then(function () {
+        var bus = c.kernel.bus;
+        bus.emit('Floret', 'map-path', { path: dir });
+        c.launch('floret');
+      });
+    });
+  }
+
+  function remove(entry) {
+    if (!confirm('Delete ' + entry.name + '?')) return;
+    c.fs.remove(entry.path).then(function () {
+      setStatus('deleted ' + entry.path);
+      CloudOS.toast('Deleted ' + entry.name, 'good');
+      refresh();
+    }).catch(function (error) {
+      CloudOS.toast('Delete failed: ' + error.message, 'bad');
+    });
+  }
+
+  function renderTree() {
+    c.fs.walk('/', { dirsOnly: true, maxDepth: 5 }).then(function (dirs) {
+      var root = { path: '/', name: 'rootfs', children: [] };
+      var index = { '/': root };
+      dirs.forEach(function (dir) {
+        if (!index[dir.path]) index[dir.path] = { path: dir.path, name: dir.name, children: [] };
+      });
+      Object.keys(index).sort().forEach(function (path) {
+        if (path === '/') return;
+        var node = index[path];
+        var parent = path.slice(0, path.lastIndexOf('/')) || '/';
+        if (!index[parent]) index[parent] = { path: parent, name: parent, children: [] };
+        index[parent].children.push(node);
+      });
+      view.tree = root;
+      var host = document.getElementById('ex-tree');
+      host.innerHTML = '';
+      host.appendChild(renderTreeNode(root, 0));
+    });
+  }
+
+  function renderTreeNode(node, depth) {
+    var wrap = document.createElement('div');
+    wrap.className = 'tree-node';
+    var row = document.createElement('div');
+    row.className = 'tree-row' + (node.path === cwd ? ' active' : '');
+    var toggle = document.createElement('span');
+    toggle.style.width = '11px';
+    toggle.textContent = node.children.length ? (view.expanded.has(node.path) ? '▾' : '▸') : '';
+    var icon = document.createElement('span');
+    icon.textContent = node.path === '/' ? '🖥️' : '📁';
+    var label = document.createElement('span');
+    label.textContent = node.name;
+    row.appendChild(toggle);
+    row.appendChild(icon);
+    row.appendChild(label);
+    toggle.addEventListener('click', function (event) {
+      event.stopPropagation();
+      if (view.expanded.has(node.path)) view.expanded.delete(node.path);
+      else view.expanded.add(node.path);
+      renderTree();
+    });
+    row.addEventListener('click', function () {
+      view.expanded.add(node.path);
+      navigate(node.path);
+    });
+    wrap.appendChild(row);
+    if (node.children.length && view.expanded.has(node.path)) {
+      var kids = document.createElement('div');
+      kids.className = 'tree-kids';
+      node.children.sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (child) {
+        kids.appendChild(renderTreeNode(child, depth + 1));
+      });
+      wrap.appendChild(kids);
+    }
+    return wrap;
+  }
+
+  CloudOS.whenReady(function () {
+    CloudOS.connect('explorer').then(function (client) {
+      c = client;
+      CloudOS.bindTheme(c);
+
+      document.getElementById('ex-menu').appendChild(CloudOS.makeMenuBar({
+        File: [
+          { label: 'New folder', run: mkdir },
+          { label: 'New file', run: mkfile },
+          { separator: true },
+          { label: 'Export folder listing', run: function () { CloudOS.download('listing.json', JSON.stringify(entries, null, 2)); } },
+          { separator: true },
+          { label: 'Close', run: function () { c.close(); } },
+        ],
+        Go: [
+          { label: 'Root', run: function () { navigate('/'); } },
+          { label: 'Home', run: function () { navigate('/home'); } },
+          { label: 'Documents', run: function () { navigate('/home/Documents'); } },
+          { label: 'System', run: function () { navigate('/system'); } },
+          { separator: true },
+          { label: 'Up one level', run: function () { navigate(cwd.slice(0, cwd.lastIndexOf('/')) || '/'); } },
+        ],
+        View: [
+          { label: 'Toggle dark / XP', run: function () { c.setTheme(c.theme().mode === 'xp' ? 'dark' : 'xp'); } },
+          { label: 'Reveal in Floret', run: function () { revealInFloret(cwd); } },
+        ],
+      }).bar);
+
+      document.getElementById('ex-back').addEventListener('click', function () {
+        navigate(history.pop() || '/', false);
+      });
+      document.getElementById('ex-up').addEventListener('click', function () {
+        navigate(cwd.slice(0, cwd.lastIndexOf('/')) || '/');
+      });
+      document.getElementById('ex-go').addEventListener('click', function () {
+        navigate(document.getElementById('ex-path').value.trim() || '/');
+      });
+      document.getElementById('ex-path').addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') navigate(event.target.value.trim() || '/');
+      });
+      document.getElementById('ex-refresh').addEventListener('click', function () { refresh(); });
+      document.getElementById('ex-mkdir').addEventListener('click', mkdir);
+      document.getElementById('ex-mkfile').addEventListener('click', mkfile);
+      document.getElementById('ex-del').addEventListener('click', function () {
+        if (selected) remove(selected);
+        else setStatus('select a file first');
+      });
+      document.getElementById('ex-rename').addEventListener('click', rename);
+      document.getElementById('ex-floret').addEventListener('click', function () { revealInFloret(cwd); });
+
+      function mkdir() {
+        var name = prompt('New folder name:', 'folder');
+        if (!name) return;
+        c.fs.mkdir(join(cwd, name)).then(function () {
+          refresh();
+          setStatus('created ' + join(cwd, name));
+        }).catch(function (error) { CloudOS.toast(error.message, 'bad'); });
+      }
+
+      function mkfile() {
+        var name = prompt('New file name:', 'untitled.txt');
+        if (!name) return;
+        c.fs.writeText(join(cwd, name), '').then(function () {
+          refresh();
+          setStatus('created ' + join(cwd, name));
+        }).catch(function (error) { CloudOS.toast(error.message, 'bad'); });
+      }
+
+      function rename() {
+        if (!selected) {
+          setStatus('select a file first');
+          return;
+        }
+        var name = prompt('Rename to:', selected.name);
+        if (!name || name === selected.name) return;
+        var target = join(cwd, name);
+        c.fs.readBytes(selected.path)
+          .then(function (bytes) { return c.fs.writeBytes(target, bytes); })
+          .then(function () { return c.fs.remove(selected.path); })
+          .then(function () {
+            refresh();
+            setStatus('renamed to ' + target);
+          })
+          .catch(function (error) { CloudOS.toast('Rename failed: ' + error.message, 'bad'); });
+      }
+
+      c.on('open-file', function (payload) {
+        if (payload && payload.path) navigate(payload.path);
+      });
+
+      var start = c.BOOT && c.BOOT.file;
+      navigate(start || '/', false);
+      c.setStatus('Explorer ready on ' + c.fs.kind);
+    }).catch(function (error) {
+      document.body.innerHTML = '<div class="empty">Explorer could not attach to the kernel.<br>' + esc(error.message) + '</div>';
+    });
+  });
+})();
+</script>
+</body>
+</html>

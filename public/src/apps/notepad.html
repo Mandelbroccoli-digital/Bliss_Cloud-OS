@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--cloudos-head-->
+<meta charset="utf-8">
+<title>Notepad</title>
+<style>
+  #np-text {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    border: 0;
+    outline: none;
+    resize: none;
+    background: var(--panel-solid);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.55;
+    padding: 10px 12px;
+    tab-size: 2;
+    user-select: text;
+  }
+  #np-text.nowrap { white-space: pre; overflow-x: auto; }
+  .np-flag { color: var(--warn); font-size: 10px; }
+  .np-path { font-family: var(--mono); font-size: 10px; color: var(--text-dim); max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+<body class="os-app">
+  <div id="np-menu"></div>
+  <div class="toolbar">
+    <button class="tool" id="np-new">New</button>
+    <button class="tool" id="np-open">Open…</button>
+    <button class="tool" id="np-save">Save</button>
+    <button class="tool" id="np-saveas">Save as…</button>
+    <span class="tool-sep"></span>
+    <button class="tool" id="np-wrap">Wrap: on</button>
+    <button class="tool" id="np-font-down">A−</button>
+    <button class="tool" id="np-font-up">A+</button>
+    <span class="tool-sep"></span>
+    <input class="field" id="np-find" placeholder="find…" style="width:130px">
+    <button class="tool" id="np-find-next">Next</button>
+    <span class="spacer"></span>
+    <span class="np-flag" id="np-flag"></span>
+  </div>
+  <textarea id="np-text" spellcheck="false"></textarea>
+  <div class="statusbar">
+    <span class="np-path" id="np-file">untitled</span>
+    <span id="np-stats"></span>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+  var c = null;
+  var currentPath = null;
+  var dirty = false;
+  var textEl, fileEl, statsEl, flagEl;
+  var fontSize = 12.5;
+  var wrap = true;
+  var findIndex = 0;
+
+  function esc(v) { return CloudOS.escapeHtml(v); }
+
+  function setDirty(value) {
+    dirty = value;
+    flagEl.textContent = value ? '● modified' : '';
+  }
+
+  function updateTitle() {
+    var name = currentPath ? String(currentPath).split('/').pop() : 'untitled';
+    fileEl.textContent = (currentPath || 'untitled') + (dirty ? ' *' : '');
+    c.setTitle('Notepad — ' + name + (dirty ? ' *' : ''));
+  }
+
+  function updateStats() {
+    var value = textEl.value;
+    var lines = value.split('\n').length;
+    var words = value.trim() ? value.trim().split(/\s+/).length : 0;
+    var caret = value.slice(0, textEl.selectionStart);
+    var line = caret.split('\n').length;
+    var col = caret.length - caret.lastIndexOf('\n');
+    statsEl.textContent = 'Ln ' + line + ', Col ' + col + ' · ' + lines + ' lines · ' + words + ' words · ' + value.length + ' chars';
+  }
+
+  function loadPath(path) {
+    if (!path) return;
+    return c.fs.readText(path).then(function (text) {
+      currentPath = path;
+      textEl.value = text;
+      setDirty(false);
+      updateTitle();
+      updateStats();
+      c.setStatus('opened ' + path);
+    }).catch(function (error) {
+      CloudOS.toast('Open failed: ' + error.message, 'bad');
+    });
+  }
+
+  function saveAs() {
+    var name = prompt('Save as (path):', currentPath || '/home/untitled.txt');
+    if (!name) return;
+    save(name);
+  }
+
+  function save(path) {
+    var target = path || currentPath;
+    if (!target) return saveAs();
+    return c.fs.writeText(target, textEl.value).then(function () {
+      currentPath = target;
+      setDirty(false);
+      updateTitle();
+      var edgeId = 'e:proc:' + c.instance + '->file:' + target + ':writes';
+      var edges = {};
+      edges[edgeId] = { id: edgeId, from: 'proc:' + c.instance, to: 'file:' + target, kind: 'writes' };
+      try {
+        c.commit({ label: 'notepad save ' + target, upsertEdges: edges });
+      } catch (error) {
+        /* node may not exist yet — the fs:changed hook indexes it */
+      }
+      c.emit('saved', { path: target, bytes: textEl.value.length });
+      c.setStatus('saved ' + target);
+      CloudOS.toast('Saved ' + String(target).split('/').pop(), 'good');
+    }).catch(function (error) {
+      CloudOS.toast('Save failed: ' + error.message, 'bad');
+    });
+  }
+
+  function findNext() {
+    var needle = document.getElementById('np-find').value;
+    if (!needle) return;
+    var haystack = textEl.value.toLowerCase();
+    var index = haystack.indexOf(needle.toLowerCase(), findIndex);
+    if (index < 0) index = haystack.indexOf(needle.toLowerCase());
+    if (index < 0) {
+      c.setStatus('not found: ' + needle);
+      return;
+    }
+    findIndex = index + needle.length;
+    textEl.focus();
+    textEl.setSelectionRange(index, index + needle.length);
+    var before = textEl.value.slice(0, index).split('\n').length;
+    c.setStatus('found on line ' + before);
+  }
+
+  CloudOS.whenReady(function () {
+    textEl = document.getElementById('np-text');
+    fileEl = document.getElementById('np-file');
+    statsEl = document.getElementById('np-stats');
+    flagEl = document.getElementById('np-flag');
+
+    CloudOS.connect('notepad').then(function (client) {
+      c = client;
+      CloudOS.bindTheme(c);
+
+      document.getElementById('np-menu').appendChild(CloudOS.makeMenuBar({
+        File: [
+          { label: 'New', run: function () { currentPath = null; textEl.value = ''; setDirty(false); updateTitle(); updateStats(); } },
+          { label: 'Open…', accel: 'Ctrl+O', run: openPrompt },
+          { label: 'Save', accel: 'Ctrl+S', run: function () { save(); } },
+          { label: 'Save as…', run: saveAs },
+          { separator: true },
+          { label: 'Close', run: function () { c.close(); } },
+        ],
+        Edit: [
+          { label: 'Find next', accel: 'Ctrl+F', run: function () { document.getElementById('np-find').focus(); } },
+          { label: 'Go to line…', run: function () {
+            var line = parseInt(prompt('Line number:', '1'), 10);
+            if (!line) return;
+            var lines = textEl.value.split('\n');
+            var index = 0;
+            for (var i = 0; i < Math.min(line - 1, lines.length); i++) index += lines[i].length + 1;
+            textEl.focus();
+            textEl.setSelectionRange(index, index);
+          } },
+        ],
+        View: [
+          { label: 'Toggle word wrap', run: toggleWrap },
+          { label: 'Toggle dark / XP', run: function () { c.setTheme(c.theme().mode === 'xp' ? 'dark' : 'xp'); } },
+        ],
+        Graph: [
+          { label: 'Open this file\'s node in Floret', run: function () {
+            if (!currentPath) return;
+            c.scan(currentPath.slice(0, currentPath.lastIndexOf('/')) || '/');
+            c.kernel.bus.emit('Floret', 'map-path', { path: currentPath.slice(0, currentPath.lastIndexOf('/')) || '/' });
+            c.launch('floret');
+          } },
+          { label: 'Undo last graph commit', run: function () { c.undo(); } },
+        ],
+      }).bar);
+
+      function openPrompt() {
+        var path = prompt('Open path:', currentPath || '/home/Desktop/welcome.md');
+        if (path) loadPath(path);
+      }
+
+      function toggleWrap() {
+        wrap = !wrap;
+        textEl.classList.toggle('nowrap', !wrap);
+        document.getElementById('np-wrap').textContent = 'Wrap: ' + (wrap ? 'on' : 'off');
+      }
+
+      document.getElementById('np-new').addEventListener('click', function () {
+        currentPath = null;
+        textEl.value = '';
+        setDirty(false);
+        updateTitle();
+        updateStats();
+      });
+      document.getElementById('np-open').addEventListener('click', openPrompt);
+      document.getElementById('np-save').addEventListener('click', function () { save(); });
+      document.getElementById('np-saveas').addEventListener('click', saveAs);
+      document.getElementById('np-wrap').addEventListener('click', toggleWrap);
+      document.getElementById('np-font-up').addEventListener('click', function () {
+        fontSize = Math.min(22, fontSize + 1);
+        textEl.style.fontSize = fontSize + 'px';
+      });
+      document.getElementById('np-font-down').addEventListener('click', function () {
+        fontSize = Math.max(9, fontSize - 1);
+        textEl.style.fontSize = fontSize + 'px';
+      });
+      document.getElementById('np-find-next').addEventListener('click', findNext);
+      document.getElementById('np-find').addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') findNext();
+      });
+
+      textEl.addEventListener('input', function () {
+        setDirty(true);
+        updateTitle();
+        updateStats();
+      });
+      textEl.addEventListener('keyup', updateStats);
+      textEl.addEventListener('click', updateStats);
+      textEl.addEventListener('keydown', function (event) {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+          event.preventDefault();
+          save();
+        } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'o') {
+          event.preventDefault();
+          openPrompt();
+        } else if (event.key === 'Tab') {
+          event.preventDefault();
+          var start = textEl.selectionStart;
+          var end = textEl.selectionEnd;
+          textEl.value = textEl.value.slice(0, start) + '  ' + textEl.value.slice(end);
+          textEl.selectionStart = textEl.selectionEnd = start + 2;
+          setDirty(true);
+          updateStats();
+        }
+      });
+
+      c.on('open-file', function (payload) {
+        if (payload && payload.path) loadPath(payload.path);
+      });
+
+      var startFile = c.BOOT && c.BOOT.file;
+      if (startFile) {
+        loadPath(startFile);
+      } else {
+        textEl.value = '# new buffer\n\nThis text lives in the real OPFS filesystem once you save it.\nPress Ctrl+S to write, and the shell will show a status message.\n';
+        updateStats();
+      }
+      updateTitle();
+      c.setStatus('Notepad ready');
+    }).catch(function (error) {
+      document.body.innerHTML = '<div class="empty">Notepad could not attach to the kernel.<br>' + esc(error.message) + '</div>';
+    });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--cloudos-head-->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Floret</title>
+<style>
+  .fl-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; background: var(--bg); }
+  .fl-stage.grabbing { cursor: grabbing; }
+  .fl-stage.linking { cursor: crosshair; }
+  .fl-grid {
+    position: absolute; inset: 0; pointer-events: none;
+    background-image: radial-gradient(var(--dot, rgba(56,189,248,.16)) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  .fl-lines { position: absolute; inset: 0; pointer-events: none; }
+  .fl-nodes { position: absolute; inset: 0; pointer-events: none; transform-origin: 0 0; }
+  .fl-node {
+    position: absolute; width: 178px; pointer-events: auto; cursor: grab;
+    background: var(--panel); border: 1px solid var(--border); border-left-width: 3px;
+    border-radius: 6px; padding: 7px 9px; box-shadow: 0 4px 14px rgba(0,0,0,.35);
+    transition: box-shadow .15s ease, opacity .15s ease; touch-action: none;
+  }
+  .fl-node:hover { box-shadow: 0 6px 20px rgba(0,0,0,.5); }
+  .fl-node.selected { box-shadow: 0 0 0 2px var(--accent), 0 8px 22px rgba(0,0,0,.5); }
+  .fl-node.dim { opacity: .28; }
+  .fl-node.link-source { box-shadow: 0 0 0 2px var(--warn), 0 0 18px rgba(251,191,36,.5); }
+  .fl-node.dragging { cursor: grabbing; z-index: 999; }
+  .fl-node .n-head { display: flex; align-items: center; gap: 6px; }
+  .fl-node .n-ico { font-size: 14px; line-height: 1; }
+  .fl-node .n-name { flex: 1; font-size: 11px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-strong); }
+  .fl-node .n-exp { width: 17px; height: 17px; border: 1px solid var(--border-strong); border-radius: 3px; background: var(--panel-2); color: var(--text); font-size: 9px; line-height: 1; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+  .fl-node .n-exp:hover { background: var(--accent); color: #fff; }
+  .fl-node .n-meta { display: flex; justify-content: space-between; gap: 6px; margin-top: 5px; font-size: 9px; font-family: var(--mono); color: var(--text-dim); }
+  .fl-node .n-meta .t { text-transform: uppercase; letter-spacing: .06em; }
+  .fl-node .n-file { margin-top: 3px; font-size: 9px; font-family: var(--mono); color: var(--warn); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fl-overlay { position: absolute; z-index: 20; }
+  #fl-legend { top: 10px; left: 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; font-size: 10px; }
+  #fl-legend .lg-row { display: flex; align-items: center; gap: 6px; padding: 2px 4px; border-radius: 3px; cursor: pointer; opacity: .95; }
+  #fl-legend .lg-row:hover { background: var(--accent-soft); }
+  #fl-legend .lg-row.off { opacity: .35; text-decoration: line-through; }
+  #fl-legend .swatch { width: 8px; height: 8px; border-radius: 2px; }
+  #fl-minimap { right: 10px; bottom: 34px; width: 168px; height: 108px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; opacity: .92; }
+  #fl-inspect { top: 10px; right: 10px; width: 300px; max-height: calc(100% - 170px); overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 9px; display: none; }
+  #fl-inspect.open { display: block; }
+  #fl-inspect h5 { margin: 0 0 6px; font-size: 11px; color: var(--text-strong); }
+  #fl-inspect .kv { display: flex; gap: 6px; font-size: 10px; font-family: var(--mono); border-bottom: 1px dashed var(--border); padding: 3px 0; }
+  #fl-inspect .kv .k { color: var(--text-dim); min-width: 74px; }
+  #fl-inspect .kv .v { flex: 1; word-break: break-all; color: var(--text); }
+  #fl-inspect .edge-row { font-size: 10px; font-family: var(--mono); padding: 3px 5px; border-radius: 3px; cursor: pointer; display: flex; gap: 6px; }
+  #fl-inspect .edge-row:hover { background: var(--accent-soft); }
+  #fl-inspect .acts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .fl-search { position: relative; }
+  .fl-search .hits { position: absolute; right: 6px; top: 4px; font-size: 9px; color: var(--text-dim); }
+  .chip-toggle { cursor: pointer; user-select: none; }
+  .chip-toggle.off { opacity: .45; }
+</style>
+</head>
+<body class="os-app">
+  <div id="fl-menu"></div>
+  <div class="toolbar">
+    <span class="chip" title="Projection of the canonical graph">🌸 FLORET</span>
+    <span class="tool-sep"></span>
+    <input class="field" id="fl-path" style="width:180px" value="/">
+    <button class="tool" id="fl-go">Go</button>
+    <button class="tool" id="fl-root">Root</button>
+    <span class="tool-sep"></span>
+    <button class="tool" id="fl-out">−</button>
+    <span class="mono" id="fl-zoom" style="font-size:10px;min-width:38px;text-align:center">100%</span>
+    <button class="tool" id="fl-in">＋</button>
+    <button class="tool" id="fl-fit">Fit</button>
+    <button class="tool" id="fl-relayout">Re-layout</button>
+    <span class="tool-sep"></span>
+    <div class="fl-search">
+      <input class="field" id="fl-search" placeholder="search nodes…" style="width:150px">
+      <span class="hits" id="fl-hits"></span>
+    </div>
+    <button class="tool" id="fl-link" title="Link mode: click two nodes to connect them">🔗 Link</button>
+    <button class="tool" id="fl-add" title="Create a new agent node">＋ Agent</button>
+    <button class="tool" id="fl-logos" title="Open Logos subkernel AI agent">🦀 Logos</button>
+    <span class="spacer"></span>
+    <span class="chip" id="fl-counts">–</span>
+  </div>
+
+  <div class="fl-stage" id="fl-stage">
+    <div class="fl-grid" id="fl-grid"></div>
+    <canvas class="fl-lines" id="fl-lines"></canvas>
+    <div class="fl-nodes" id="fl-nodes"></div>
+    <div class="fl-overlay" id="fl-legend"></div>
+    <canvas class="fl-overlay" id="fl-minimap" width="168" height="108"></canvas>
+    <div class="fl-overlay" id="fl-inspect"></div>
+  </div>
+
+  <div class="statusbar">
+    <span id="fl-status">starting…</span>
+    <span id="fl-status-right"></span>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  var PARENT_PRIORITY = ['contains', 'mounts', 'owns', 'launches', 'spawns', 'opens', 'reads', 'writes', 'communicates'];
+  var NODE_W = 178;
+  var NODE_H = 56;
+  var COL_W = 250;
+  var ROW_H = 82;
+
+  var c = null;
+  var stage, nodesLayer, canvas, ctx, minimap, mmctx;
+  var nodeEls = new Map();
+  var positions = new Map();
+  var dims = { w: 0, h: 0, dpr: 1 };
+  var view = { pan: { x: 60, y: 40 }, zoom: 1 };
+  var collapsed = new Set();
+  var typeFilter = new Set();
+  var selected = null;
+  var linkFrom = null;
+  var linkMode = false;
+  var searchHits = [];
+  var searchIndex = 0;
+  var drag = null;
+  var panDrag = null;
+  var needsFit = true;
+
+  var statusEl, rightEl, zoomEl, countsEl, inspectEl, legendEl, pathEl, hitsEl;
+
+  function stageRect() {
+    return stage.getBoundingClientRect();
+  }
+
+  function styleOf(node) {
+    return (c && c.kernel.NODE_STYLE[node.type]) || { icon: '❓', color: '#94a3b8', label: node.type };
+  }
+
+  function labelOf(node) {
+    return node.name || node.title || node.path || node.id;
+  }
+
+  function nodeSummary(node) {
+    if (node.type === 'dir' || node.type === 'file') return node.path || '';
+    if (node.type === 'process') return node.appId ? (node.status || 'running') + ' · pid ' + (node.pid || '-') : (node.status || '');
+    if (node.type === 'window') return node.appId + (node.file ? ' · ' + String(node.file).split('/').pop() : '');
+    if (node.type === 'app') return node.kind || 'app';
+    if (node.type === 'service') return (node.mode || node.mount || 'service');
+    if (node.type === 'agent') return node.capabilities ? node.capabilities.join(',') : 'agent';
+    return node.type;
+  }
+
+  function typeVisible(node) {
+    return !typeFilter.size || typeFilter.has(node.type);
+  }
+
+  function buildGraphModel() {
+    var store = c.graph();
+    var ids = Object.keys(store.nodes);
+    var parentOf = new Map();
+    var childrenOf = new Map();
+    var incoming = new Map();
+    var outgoing = new Map();
+
+    ids.forEach(function (id) {
+      incoming.set(id, []);
+      outgoing.set(id, []);
+    });
+
+    Object.keys(store.edges).forEach(function (eid) {
+      var edge = store.edges[eid];
+      var candidates = parentOf.get(edge.to);
+      var rank = PARENT_PRIORITY.indexOf(edge.kind);
+      if (rank < 0) rank = PARENT_PRIORITY.length;
+      var isBetter = !candidates || rank < candidates.rank || (rank === candidates.rank && edge.from < candidates.from);
+      if (edge.kind !== 'communicates' || !candidates) {
+        if (isBetter && edge.from !== edge.to) parentOf.set(edge.to, { from: edge.from, rank: rank, kind: edge.kind });
+      }
+      if (outgoing.has(edge.from)) outgoing.get(edge.from).push(edge);
+      if (incoming.has(edge.to)) incoming.get(edge.to).push(edge);
+    });
+
+    var visible = new Set();
+    ids.forEach(function (id) {
+      var node = store.nodes[id];
+      if (!typeVisible(node)) return;
+      var parent = parentOf.get(id);
+      var walk = parent ? parent.from : null;
+      var guard = 0;
+      while (walk && guard++ < 64) {
+        if (collapsed.has(walk) || !typeVisible(store.nodes[walk])) return;
+        var up = parentOf.get(walk);
+        walk = up ? up.from : null;
+      }
+      visible.add(id);
+    });
+
+    visible.forEach(function (id) {
+      var parent = parentOf.get(id);
+      var parentId = parent && visible.has(parent.from) ? parent.from : null;
+      if (!childrenOf.has(parentId)) childrenOf.set(parentId, []);
+      childrenOf.get(parentId).push(id);
+    });
+
+    childrenOf.forEach(function (list) {
+      list.sort(function (a, b) {
+        return labelOf(store.nodes[a]).localeCompare(labelOf(store.nodes[b])) || a.localeCompare(b);
+      });
+    });
+
+    var order = new Map();
+    var counter = 0;
+    var roots = (childrenOf.get(null) || []).slice();
+    var visit = function (id, depth) {
+      order.set(id, { depth: depth, row: counter++ });
+      (childrenOf.get(id) || []).forEach(function (child) {
+        visit(child, depth + 1);
+      });
+    };
+    roots.forEach(function (root) {
+      visit(root, 0);
+    });
+
+    var byDepth = new Map();
+    order.forEach(function (info, id) {
+      if (!byDepth.has(info.depth)) byDepth.set(info.depth, []);
+      byDepth.get(info.depth).push({ id: id, row: info.row });
+    });
+
+    var laid = new Map();
+    byDepth.forEach(function (list, depth) {
+      list.sort(function (a, b) {
+        return a.row - b.row;
+      });
+      var total = list.length;
+      list.forEach(function (entry, index) {
+        laid.set(entry.id, { x: depth * COL_W, y: Math.round((index - (total - 1) / 2) * ROW_H) });
+      });
+    });
+
+    ids.forEach(function (id) {
+      var node = store.nodes[id];
+      if (node.layout && typeof node.layout.x === 'number') laid.set(id, { x: node.layout.x, y: node.layout.y });
+    });
+
+    return { store: store, ids: ids, visible: visible, laid: laid, parentOf: parentOf, childrenOf: childrenOf, incoming: incoming, outgoing: outgoing };
+  }
+
+  var model = null;
+
+  function ensurePositions(recompute) {
+    if (recompute || !positions.size) {
+      positions = new Map();
+      model.laid.forEach(function (value, key) {
+        positions.set(key, { x: value.x, y: value.y });
+      });
+    } else {
+      model.laid.forEach(function (value, key) {
+        if (!positions.has(key)) positions.set(key, { x: value.x, y: value.y });
+      });
+    }
+  }
+
+  function applyTransform() {
+    nodesLayer.style.transform = 'translate(' + view.pan.x + 'px,' + view.pan.y + 'px) scale(' + view.zoom + ')';
+    zoomEl.textContent = Math.round(view.zoom * 100) + '%';
+  }
+
+  function renderNodes() {
+    var seen = new Set();
+    model.visible.forEach(function (id) {
+      var node = model.store.nodes[id];
+      seen.add(id);
+      var el = nodeEls.get(id);
+      var style = styleOf(node);
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'fl-node';
+        el.dataset.id = id;
+        el.innerHTML =
+          '<div class="n-head"><span class="n-ico"></span><span class="n-name"></span><button class="n-exp" hidden></button></div>' +
+          '<div class="n-meta"><span class="t"></span><span class="c"></span></div>' +
+          '<div class="n-file" hidden></div>';
+        el.addEventListener('pointerdown', onNodePointerDown);
+        el.addEventListener('click', function (event) {
+          event.stopPropagation();
+          selectNode(id);
+        });
+        el.addEventListener('dblclick', function (event) {
+          event.stopPropagation();
+          activateNode(id);
+        });
+        el.addEventListener('contextmenu', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          nodeMenu(id, event.clientX, event.clientY);
+        });
+        el.querySelector('.n-exp').addEventListener('pointerdown', function (event) {
+          event.stopPropagation();
+        });
+        el.querySelector('.n-exp').addEventListener('click', function (event) {
+          event.stopPropagation();
+          toggleExpand(id);
+        });
+        nodesLayer.appendChild(el);
+        nodeEls.set(id, el);
+      }
+      var pos = positions.get(id) || { x: 0, y: 0 };
+      el.style.left = pos.x + 'px';
+      el.style.top = pos.y + 'px';
+      el.style.borderLeftColor = style.color;
+      el.querySelector('.n-ico').textContent = node.icon || style.icon;
+      el.querySelector('.n-name').textContent = labelOf(node);
+      el.querySelector('.n-name').title = id;
+      var metaType = el.querySelector('.n-meta .t');
+      metaType.textContent = node.type;
+      metaType.style.color = style.color;
+      var childCount = (model.childrenOf.get(id) || []).length;
+      el.querySelector('.n-meta .c').textContent = childCount ? childCount + ' ↳' : nodeSummary(node).slice(0, 18);
+      var fileEl = el.querySelector('.n-file');
+      if (node.file) {
+        fileEl.hidden = false;
+        fileEl.textContent = String(node.file).split('/').pop();
+      } else {
+        fileEl.hidden = true;
+      }
+      var expandBtn = el.querySelector('.n-exp');
+      var hasChildren = (model.childrenOf.get(id) || []).length > 0;
+      var expandable = node.type === 'dir' || hasChildren;
+      if (expandable) {
+        expandBtn.hidden = false;
+        expandBtn.textContent = collapsed.has(id) ? '▶' : '▼';
+      } else {
+        expandBtn.hidden = true;
+      }
+      el.classList.toggle('selected', selected === id);
+      el.classList.toggle('link-source', linkFrom === id);
+      var isHit = searchHits.indexOf(id) >= 0;
+      var dimmed = (selected && !isNeighbor(selected, id) && selected !== id) || (searchHits.length && !isHit);
+      el.classList.toggle('dim', !!dimmed);
+    });
+
+    nodeEls.forEach(function (el, id) {
+      if (!seen.has(id)) {
+        el.remove();
+        nodeEls.delete(id);
+        positions.delete(id);
+      }
+    });
+  }
+
+  function isNeighbor(a, b) {
+    if (a === b) return true;
+    var inc = model.incoming.get(a) || [];
+    var out = model.outgoing.get(a) || [];
+    for (var i = 0; i < inc.length; i++) if (inc[i].from === b) return true;
+    for (var j = 0; j < out.length; j++) if (out[j].to === b) return true;
+    return false;
+  }
+
+  function rectOf(id) {
+    var pos = positions.get(id) || { x: 0, y: 0 };
+    return { x: pos.x, y: pos.y, w: NODE_W, h: NODE_H };
+  }
+
+  function anchor(fromRect, toRect) {
+    var cx = fromRect.x + fromRect.w / 2;
+    var cy = fromRect.y + fromRect.h / 2;
+    var tx = toRect.x + toRect.w / 2;
+    var ty = toRect.y + toRect.h / 2;
+    var dx = tx - cx;
+    var dy = ty - cy;
+    if (dx === 0 && dy === 0) return { x: cx, y: cy, nx: 0, ny: 0 };
+    var hw = fromRect.w / 2 + 2;
+    var hh = fromRect.h / 2 + 2;
+    var scale = Math.min(hw / Math.abs(dx || 1e-6), hh / Math.abs(dy || 1e-6));
+    return { x: cx + dx * scale, y: cy + dy * scale, nx: dx / Math.hypot(dx, dy), ny: dy / Math.hypot(dy, dy) };
+  }
+
+  function drawEdges(time) {
+    if (!ctx || !model) return;
+    ctx.setTransform(dims.dpr, 0, 0, dims.dpr, 0, 0);
+    ctx.clearRect(0, 0, dims.w, dims.h);
+    ctx.setTransform(dims.dpr * view.zoom, 0, 0, dims.dpr * view.zoom, dims.dpr * view.pan.x, dims.dpr * view.pan.y);
+
+    var edgeStyles = c.kernel.EDGE_STYLE;
+    var ids = Object.keys(model.store.edges);
+    for (var i = 0; i < ids.length; i++) {
+      var edge = model.store.edges[ids[i]];
+      if (!model.visible.has(edge.from) || !model.visible.has(edge.to)) continue;
+      var touching = selected && (edge.from === selected || edge.to === selected);
+      var a = anchor(rectOf(edge.from), rectOf(edge.to));
+      var b = anchor(rectOf(edge.to), rectOf(edge.from));
+      var style = edgeStyles[edge.kind] || { color: '#64748b', dash: [] };
+      var dim = (selected && !touching) || (searchHits.length && searchHits.indexOf(edge.from) < 0 && searchHits.indexOf(edge.to) < 0);
+      ctx.globalAlpha = dim ? 0.12 : (touching ? 0.95 : 0.5);
+      ctx.strokeStyle = style.color;
+      ctx.lineWidth = (touching ? 2.2 : 1.4) / view.zoom;
+      ctx.setLineDash((style.dash || []).map(function (d) { return d / view.zoom; }));
+      ctx.beginPath();
+      var horizontal = Math.abs(b.x - a.x) > Math.abs(b.y - a.y);
+      ctx.moveTo(a.x, a.y);
+      if (horizontal) {
+        var mx = (a.x + b.x) / 2;
+        ctx.bezierCurveTo(mx, a.y, mx, b.y, b.x, b.y);
+      } else {
+        var my = (a.y + b.y) / 2;
+        ctx.bezierCurveTo(a.x, my, b.x, my, b.x, b.y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      var angle = Math.atan2(b.y - a.y, b.x - a.x);
+      var size = (touching ? 8 : 6) / view.zoom;
+      ctx.fillStyle = style.color;
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y);
+      ctx.lineTo(b.x - Math.cos(angle - 0.4) * size, b.y - Math.sin(angle - 0.4) * size);
+      ctx.lineTo(b.x - Math.cos(angle + 0.4) * size, b.y - Math.sin(angle + 0.4) * size);
+      ctx.closePath();
+      ctx.fill();
+
+      if (touching && view.zoom > 0.55) {
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = style.color;
+        ctx.font = (10 / view.zoom) + 'px ui-monospace, monospace';
+        var label = edge.kind;
+        var mx2 = (a.x + b.x) / 2;
+        var my2 = (a.y + b.y) / 2;
+        var width = ctx.measureText(label).width + 8 / view.zoom;
+        ctx.globalAlpha = 0.82;
+        ctx.fillStyle = 'rgba(6,10,16,0.85)';
+        ctx.fillRect(mx2 - width / 2, my2 - 9 / view.zoom, width, 14 / view.zoom);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = style.color;
+        ctx.fillText(label, mx2 - width / 2 + 4 / view.zoom, my2 + 1 / view.zoom);
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  function drawMinimap() {
+    if (!mmctx || !model) return;
+    var box = bounds.ready ? bounds : computeBounds(false);
+    mmctx.clearRect(0, 0, minimap.width, minimap.height);
+    mmctx.fillStyle = 'rgba(6,10,16,0.6)';
+    mmctx.fillRect(0, 0, minimap.width, minimap.height);
+    var pad = 6;
+    var sx = (minimap.width - pad * 2) / Math.max(1, box.maxX - box.minX);
+    var sy = (minimap.height - pad * 2) / Math.max(1, box.maxY - box.minY);
+    var scale = Math.min(sx, sy);
+    mmctx.lineWidth = 0.6;
+    model.visible.forEach(function (id) {
+      var rect = rectOf(id);
+      var x = pad + (rect.x - box.minX) * scale;
+      var y = pad + (rect.y - box.minY) * scale;
+      mmctx.fillStyle = styleOf(model.store.nodes[id]).color;
+      mmctx.globalAlpha = id === selected ? 1 : 0.7;
+      mmctx.fillRect(x, y, Math.max(2, rect.w * scale), Math.max(1.6, rect.h * scale));
+    });
+    mmctx.globalAlpha = 1;
+  }
+
+  var bounds = { minX: 0, minY: 0, maxX: 1200, maxY: 600, ready: false };
+
+  function computeBounds(update) {
+    var box = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity, ready: false };
+    model.visible.forEach(function (id) {
+      var rect = rectOf(id);
+      box.minX = Math.min(box.minX, rect.x);
+      box.minY = Math.min(box.minY, rect.y);
+      box.maxX = Math.max(box.maxX, rect.x + rect.w);
+      box.maxY = Math.max(box.maxY, rect.y + rect.h);
+    });
+    if (!isFinite(box.minX)) {
+      box = { minX: 0, minY: 0, maxX: 800, maxY: 400, ready: false };
+    }
+    if (update) bounds = box;
+    return box;
+  }
+
+  function refresh(recomputeLayout) {
+    model = buildGraphModel();
+    ensurePositions(!!recomputeLayout);
+    renderNodes();
+    drawEdges();
+    drawMinimap();
+    updateStatus();
+    if (needsFit && model.visible.size) {
+      needsFit = false;
+      fit();
+    }
+  }
+
+  function updateStatus() {
+    var stats = model.store.stats();
+    countsEl.textContent = stats.nodes + ' nodes · ' + stats.edges + ' edges · v' + stats.version;
+    var sel = selected && model.store.nodes[selected];
+    statusEl.textContent = sel
+      ? 'selected ' + sel.id
+      : (collapsed.size ? collapsed.size + ' collapsed · ' : '') + 'drag background to pan · wheel to zoom · dbl-click to open';
+    rightEl.textContent = (c.standalone ? 'standalone · ' : '') + 'fs ' + c.fs.kind + ' · graph v' + stats.version;
+  }
+
+  function selectNode(id) {
+    selected = id === selected ? null : id;
+    renderNodes();
+    drawEdges();
+    renderInspector();
+    updateStatus();
+  }
+
+  function activateNode(id) {
+    var node = model.store.nodes[id];
+    if (!node) return;
+    if (node.type === 'dir') {
+      toggleExpand(id);
+      return;
+    }
+    if (node.type === 'file') {
+      c.open(node.path);
+      return;
+    }
+    if (node.type === 'app') {
+      c.launch(node.id.replace('app:', ''));
+      return;
+    }
+    if (node.type === 'window') {
+      c.kernel.bus.emit('Shell', 'focus-app', { instance: node.instance });
+      return;
+    }
+    selectNode(id);
+  }
+
+  function toggleExpand(id) {
+    var node = model.store.nodes[id];
+    if (!node) return;
+    if (node.type === 'dir' && !node.scanned) {
+      statusEl.textContent = 'scanning ' + node.path + '…';
+      c.scan(node.path).then(function () {
+        collapsed.delete(id);
+        refresh(false);
+      });
+      return;
+    }
+    if (collapsed.has(id)) collapsed.delete(id);
+    else collapsed.add(id);
+    refresh(false);
+  }
+
+  function fit() {
+    var box = computeBounds(true);
+    var rect = stageRect();
+    var pad = 60;
+    var zoom = Math.min((rect.width - pad * 2) / Math.max(1, box.maxX - box.minX), (rect.height - pad * 2) / Math.max(1, box.maxY - box.minY));
+    view.zoom = Math.max(0.25, Math.min(1.4, zoom));
+    view.pan.x = (rect.width - (box.maxX - box.minX) * view.zoom) / 2 - box.minX * view.zoom;
+    view.pan.y = (rect.height - (box.maxY - box.minY) * view.zoom) / 2 - box.minY * view.zoom;
+    applyTransform();
+    drawEdges();
+    drawMinimap();
+  }
+
+  function centerOn(id) {
+    var rect = stageRect();
+    var card = rectOf(id);
+    view.pan.x = rect.width / 2 - (card.x + card.w / 2) * view.zoom;
+    view.pan.y = rect.height / 2 - (card.y + card.h / 2) * view.zoom;
+    applyTransform();
+    drawEdges();
+    drawMinimap();
+  }
+
+  function zoomBy(factor, clientX, clientY) {
+    var rect = stageRect();
+    var x = clientX == null ? rect.width / 2 : clientX - rect.left;
+    var y = clientY == null ? rect.height / 2 : clientY - rect.top;
+    var worldX = (x - view.pan.x) / view.zoom;
+    var worldY = (y - view.pan.y) / view.zoom;
+    view.zoom = Math.max(0.25, Math.min(2.2, view.zoom * factor));
+    view.pan.x = x - worldX * view.zoom;
+    view.pan.y = y - worldY * view.zoom;
+    applyTransform();
+    drawEdges();
+    drawMinimap();
+  }
+
+  function onNodePointerDown(event) {
+    if (event.button !== 0) return;
+    var id = event.currentTarget.dataset.id;
+    if (linkMode) {
+      if (!linkFrom) {
+        linkFrom = id;
+        statusEl.textContent = 'link: pick the target node (Esc to cancel)';
+      } else if (linkFrom !== id) {
+        var store = c.graph();
+        var from = linkFrom;
+        var edgeId = 'e:' + from + '->' + id + ':communicates';
+        c.commit({
+          label: 'link ' + from + ' -> ' + id,
+          upsertEdges: (function () { var e = {}; e[edgeId] = { id: edgeId, from: from, to: id, kind: 'communicates' }; return e; })(),
+        });
+        linkFrom = null;
+        statusEl.textContent = 'linked ' + from + ' → ' + id;
+      }
+      renderNodes();
+      drawEdges();
+      return;
+    }
+    event.stopPropagation();
+    selectNodeIfNeeded(id);
+    var pos = positions.get(id) || { x: 0, y: 0 };
+    drag = { id: id, startX: event.clientX, startY: event.clientY, x: pos.x, y: pos.y, el: event.currentTarget, moved: false };
+    event.currentTarget.classList.add('dragging');
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.currentTarget.addEventListener('pointermove', onNodeDragMove);
+    event.currentTarget.addEventListener('pointerup', onNodeDragUp, { once: true });
+    event.currentTarget.addEventListener('pointercancel', onNodeDragUp, { once: true });
+  }
+
+  function selectNodeIfNeeded(id) {
+    if (selected !== id) {
+      selected = id;
+      renderInspector();
+      updateStatus();
+    }
+  }
+
+  function onNodeDragMove(event) {
+    if (!drag) return;
+    var dx = (event.clientX - drag.startX) / view.zoom;
+    var dy = (event.clientY - drag.startY) / view.zoom;
+    if (Math.abs(dx) + Math.abs(dy) > 2) drag.moved = true;
+    positions.set(drag.id, { x: Math.round(drag.x + dx), y: Math.round(drag.y + dy) });
+    drag.el.style.left = positions.get(drag.id).x + 'px';
+    drag.el.style.top = positions.get(drag.id).y + 'px';
+    drawEdges();
+    drawMinimap();
+  }
+
+  function onNodeDragUp() {
+    if (!drag) return;
+    var el = drag.el;
+    el.classList.remove('dragging');
+    el.removeEventListener('pointermove', onNodeDragMove);
+    if (drag.moved) {
+      var node = c.graph().nodes[drag.id];
+      var pos = positions.get(drag.id);
+      if (node) {
+        var patch = {};
+        patch[drag.id] = Object.assign({}, node, { layout: { x: pos.x, y: pos.y } });
+        c.commit({ label: 'move ' + drag.id, upsertNodes: patch, coalesceKey: 'layout:' + drag.id });
+        c.emit('layout', { id: drag.id, x: pos.x, y: pos.y });
+      }
+    }
+    drag = null;
+    refresh(false);
+  }
+
+  function renderInspector() {
+    if (!selected || !model.store.nodes[selected]) {
+      inspectEl.classList.remove('open');
+      inspectEl.innerHTML = '';
+      return;
+    }
+    var node = model.store.nodes[selected];
+    var style = styleOf(node);
+    var html = '<h5>' + CloudOS.escapeHtml(style.icon + ' ' + labelOf(node)) + '</h5>';
+    html += '<div class="kv"><span class="k">id</span><span class="v">' + CloudOS.escapeHtml(node.id) + '</span></div>';
+    html += '<div class="kv"><span class="k">type</span><span class="v" style="color:' + style.color + '">' + CloudOS.escapeHtml(node.type) + '</span></div>';
+    Object.keys(node).forEach(function (key) {
+      if (key === 'id' || key === 'type' || key === 'layout') return;
+      var value = node[key];
+      if (value && typeof value === 'object') value = JSON.stringify(value);
+      html += '<div class="kv"><span class="k">' + CloudOS.escapeHtml(key) + '</span><span class="v">' + CloudOS.escapeHtml(String(value)) + '</span></div>';
+    });
+
+    var outs = model.outgoing.get(selected) || [];
+    var ins = model.incoming.get(selected) || [];
+    html += '<div class="panel-title" style="margin-top:8px">outgoing (' + outs.length + ')</div>';
+    outs.forEach(function (edge) {
+      html += '<div class="edge-row" data-go="' + CloudOS.escapeHtml(edge.to) + '">→ <b>' + CloudOS.escapeHtml(edge.kind) + '</b> ' + CloudOS.escapeHtml(labelOf(model.store.nodes[edge.to] || { id: edge.to })) + '</div>';
+    });
+    html += '<div class="panel-title" style="margin-top:8px">incoming (' + ins.length + ')</div>';
+    ins.forEach(function (edge) {
+      html += '<div class="edge-row" data-go="' + CloudOS.escapeHtml(edge.from) + '">← <b>' + CloudOS.escapeHtml(edge.kind) + '</b> ' + CloudOS.escapeHtml(labelOf(model.store.nodes[edge.from] || { id: edge.from })) + '</div>';
+    });
+
+    html += '<div class="acts">' +
+      '<button class="tool" data-act="open">Open</button>' +
+      '<button class="tool" data-act="focus">Center</button>' +
+      '<button class="tool" data-act="expand">Toggle branch</button>' +
+      '<button class="tool" data-act="link">Link…</button>' +
+      '<button class="tool" data-act="delete">Delete node</button>' +
+      '</div>';
+
+    html += '<div style="margin-top:10px;padding:8px;background:var(--panel-2);border:1px solid var(--border);border-radius:5px">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
+        '<span style="font-size:10px;font-weight:700;color:var(--accent)">🦀 Logos Intelligence</span>' +
+        '<button class="tool" data-act="open-logos" style="padding:2px 6px;font-size:9px">Open Logos</button>' +
+      '</div>' +
+      '<div style="display:flex;gap:4px;margin-bottom:6px">' +
+        '<button class="tool" data-act="ai-explain" style="flex:1;font-size:9px">Explain</button>' +
+        '<button class="tool" data-act="ai-connect" style="flex:1;font-size:9px">Connect Agent</button>' +
+      '</div>' +
+      '<div id="fl-ai-reply" style="font-size:9.5px;color:var(--text);font-family:var(--mono);line-height:1.45;background:var(--bg);padding:6px;border-radius:4px;max-height:140px;overflow-y:auto;display:none;border:1px solid var(--border)"></div>' +
+    '</div>';
+
+    inspectEl.innerHTML = html;
+    inspectEl.classList.add('open');
+    Array.prototype.forEach.call(inspectEl.querySelectorAll('.edge-row'), function (row) {
+      row.addEventListener('click', function () {
+        var id = row.dataset.go;
+        selected = id;
+        renderInspector();
+        renderNodes();
+        drawEdges();
+        centerOn(id);
+      });
+    });
+    Array.prototype.forEach.call(inspectEl.querySelectorAll('[data-act]'), function (button) {
+      button.addEventListener('click', function () {
+        act(button.dataset.act, selected);
+      });
+    });
+  }
+
+  function connectToLogos(id) {
+    var agentId = 'agent:logos';
+    var node = c.graph().nodes[id];
+    var edgeKind = node && (node.type === 'file' || node.type === 'dir') ? 'reads' : 'communicates';
+    var edgeId = 'e:' + agentId + '->' + id + ':' + edgeKind;
+    var upsertEdges = {};
+    upsertEdges[edgeId] = { id: edgeId, from: agentId, to: id, kind: edgeKind };
+    c.commit({ label: 'Logos: connect to ' + id, upsertEdges: upsertEdges });
+    statusEl.textContent = 'connected Logos 🦀 → ' + id;
+    refresh(false);
+  }
+
+  function act(action, id) {
+    var node = c.graph().nodes[id];
+    if (!node) return;
+    if (action === 'open') activateNode(id);
+    else if (action === 'focus') centerOn(id);
+    else if (action === 'expand') toggleExpand(id);
+    else if (action === 'link') {
+      linkFrom = id;
+      linkMode = true;
+      renderNodes();
+      statusEl.textContent = 'link: click the target node';
+    } else if (action === 'delete') {
+      c.commit({ label: 'delete ' + id, deleteNodes: [id] });
+      selected = null;
+      renderInspector();
+    } else if (action === 'open-logos') {
+      c.launch('logos', {});
+      setTimeout(function () {
+        c.kernel.bus.emit('Logos', 'analyze-node', { node: node });
+      }, 350);
+    } else if (action === 'ai-connect') {
+      connectToLogos(id);
+    } else if (action === 'ai-explain') {
+      var box = document.getElementById('fl-ai-reply');
+      if (box) {
+        box.style.display = 'block';
+        box.innerHTML = '<span style="color:var(--dim)">Thinking with Gemini 3.8…</span>';
+        var prompt = 'Explain this node in CloudOS graph: ID ' + node.id + ', type: ' + node.type + ', name/title: ' + (node.title || node.name || '') + ', details: ' + JSON.stringify(node);
+        fetch('/api/gemini', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: prompt, model: 'gemini-3.8-flash' })
+        }).then(function (res) { return res.json(); }).then(function (data) {
+          box.innerHTML = CloudOS.escapeHtml(data.text || 'No response from Logos').replace(/\n/g, '<br>');
+        }).catch(function (err) {
+          box.innerHTML = '<span style="color:var(--err)">' + CloudOS.escapeHtml(err.message) + '</span>';
+        });
+      }
+    }
+  }
+
+  function nodeMenu(id, x, y) {
+    var node = c.graph().nodes[id];
+    var items = [
+      { label: 'Open / activate', icon: '⏎', run: function () { activateNode(id); } },
+      { label: 'Center in view', icon: '🎯', run: function () { centerOn(id); } },
+      { label: 'Toggle branch', icon: '🌿', run: function () { toggleExpand(id); } },
+    ];
+    if (node && node.type === 'dir') {
+      items.push({ label: 'Re-scan directory', icon: '🔎', run: function () { c.scan(node.path).then(function () { refresh(false); }); } });
+    }
+    if (node && node.path) {
+      items.push({ label: 'Open in Explorer', icon: '📂', run: function () { c.launch('explorer', { file: node.path }); } });
+    }
+    items.push(
+      { separator: true },
+      { label: 'Ask Logos about this node 🦀', icon: '🦀', run: function () {
+        c.launch('logos');
+        setTimeout(function () {
+          c.kernel.bus.emit('Logos', 'analyze-node', { node: node });
+        }, 350);
+      } },
+      { label: 'Connect to Agent (Logos)', icon: '🤖', run: function () { connectToLogos(id); } },
+      { separator: true },
+      { label: 'Start link from here', icon: '🔗', run: function () { linkFrom = id; linkMode = true; renderNodes(); } },
+      { label: 'Copy node id', icon: '📋', run: function () { if (navigator.clipboard) navigator.clipboard.writeText(id); statusEl.textContent = 'copied ' + id; } },
+      { label: 'Inspect in Graph Store', icon: '🕸️', run: function () { c.launch('inspector'); } },
+      { separator: true },
+      { label: 'Delete node', icon: '🗑️', run: function () { c.commit({ label: 'delete ' + id, deleteNodes: [id] }); if (selected === id) selected = null; renderInspector(); } }
+    );
+    showMenu(x, y, items);
+  }
+
+  function showMenu(x, y, items) {
+    var host = document.getElementById('fl-ctx');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'fl-ctx';
+      host.className = 'fl-overlay';
+      host.style.cssText = 'position:fixed;z-index:900;background:var(--panel-solid);border:1px solid var(--border-strong);border-radius:5px;padding:4px;box-shadow:0 12px 28px rgba(0,0,0,.5);min-width:200px;font-size:11px';
+      document.body.appendChild(host);
+    }
+    host.innerHTML = '';
+    items.forEach(function (item) {
+      if (item.separator) {
+        var sep = document.createElement('div');
+        sep.style.cssText = 'height:1px;background:var(--border);margin:4px 2px';
+        host.appendChild(sep);
+        return;
+      }
+      var row = document.createElement('div');
+      row.className = 'list-row';
+      row.style.fontSize = '11px';
+      row.textContent = (item.icon ? item.icon + ' ' : '') + item.label;
+      row.addEventListener('click', function () {
+        host.remove();
+        item.run();
+      });
+      host.appendChild(row);
+    });
+    host.style.left = Math.min(x, window.innerWidth - 220) + 'px';
+    host.style.top = Math.min(y, window.innerHeight - host.offsetHeight - 8) + 'px';
+    setTimeout(function () {
+      document.addEventListener('pointerdown', function close(event) {
+        if (!host.contains(event.target)) {
+          host.remove();
+          document.removeEventListener('pointerdown', close);
+        }
+      });
+    }, 0);
+  }
+
+  function renderLegend() {
+    var types = Object.keys(c.kernel.NODE_STYLE).filter(function (type) { return type !== 'unknown'; });
+    var html = '<div style="letter-spacing:.1em;color:var(--text-dim);margin-bottom:5px">NODE TYPES</div>';
+    types.forEach(function (type) {
+      var style = c.kernel.NODE_STYLE[type];
+      var count = c.graph().query({ type: type }).length;
+      html += '<div class="lg-row' + (typeFilter.size && !typeFilter.has(type) ? ' off' : '') + '" data-type="' + type + '">' +
+        '<span class="swatch" style="background:' + style.color + '"></span>' +
+        '<span style="flex:1">' + type + '</span>' +
+        '<span class="dim mono">' + count + '</span></div>';
+    });
+    legendEl.innerHTML = html;
+    Array.prototype.forEach.call(legendEl.querySelectorAll('.lg-row'), function (row) {
+      row.addEventListener('click', function () {
+        var type = row.dataset.type;
+        if (typeFilter.has(type)) typeFilter.delete(type);
+        else typeFilter.add(type);
+        refresh(false);
+        renderLegend();
+      });
+    });
+  }
+
+  function runSearch(query) {
+    var q = String(query || '').trim().toLowerCase();
+    searchHits = [];
+    if (q) {
+      Object.keys(model.store.nodes).forEach(function (id) {
+        var node = model.store.nodes[id];
+        var haystack = (id + ' ' + labelOf(node) + ' ' + (node.path || '') + ' ' + (node.appId || '') + ' ' + (node.desc || '')).toLowerCase();
+        if (haystack.indexOf(q) >= 0 && model.visible.has(id)) searchHits.push(id);
+      });
+    }
+    searchIndex = 0;
+    hitsEl.textContent = q ? (searchHits.length ? '1/' + searchHits.length : 'none') : '';
+    if (searchHits.length) centerOn(searchHits[0]);
+    renderNodes();
+    drawEdges();
+  }
+
+  function cycleSearch() {
+    if (!searchHits.length) return;
+    searchIndex = (searchIndex + 1) % searchHits.length;
+    hitsEl.textContent = (searchIndex + 1) + '/' + searchHits.length;
+    selected = searchHits[searchIndex];
+    renderInspector();
+    renderNodes();
+    drawEdges();
+    centerOn(selected);
+  }
+
+  function addNode() {
+    var name = prompt('New agent node name:', 'agent-' + Math.floor(Math.random() * 900 + 100));
+    if (!name) return;
+    var rect = stageRect();
+    var worldX = (rect.width / 2 - view.pan.x) / view.zoom;
+    var worldY = (rect.height / 2 - view.pan.y) / view.zoom;
+    var id = 'agent:' + String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + ':' + Math.floor(Math.random() * 1e4).toString(36);
+    var patch = {};
+    patch[id] = { id: id, type: 'agent', name: name, capabilities: ['chat'], createdBy: 'floret', layout: { x: Math.round(worldX), y: Math.round(worldY) } };
+    c.commit({ label: 'add agent ' + name, upsertNodes: patch });
+    var bus = c.kernel.bus;
+    var shellNode = 'sys:shell';
+    if (c.graph().nodes[shellNode]) {
+      var edgeId = 'e:' + shellNode + '->' + id + ':spawns';
+      var edges = {};
+      edges[edgeId] = { id: edgeId, from: shellNode, to: id, kind: 'spawns' };
+      c.commit({ label: 'spawn ' + name, upsertEdges: edges });
+    }
+    selected = id;
+    refresh(false);
+    centerOn(id);
+  }
+
+  function setupStage() {
+    stage = document.getElementById('fl-stage');
+    nodesLayer = document.getElementById('fl-nodes');
+    canvas = document.getElementById('fl-lines');
+    ctx = canvas.getContext('2d');
+    minimap = document.getElementById('fl-minimap');
+    mmctx = minimap.getContext('2d');
+
+    var resize = function () {
+      var rect = stage.getBoundingClientRect();
+      dims.w = rect.width;
+      dims.h = rect.height;
+      dims.dpr = Math.min(2, window.devicePixelRatio || 1);
+      canvas.width = Math.max(1, Math.floor(rect.width * dims.dpr));
+      canvas.height = Math.max(1, Math.floor(rect.height * dims.dpr));
+      canvas.style.width = rect.width + 'px';
+      canvas.style.height = rect.height + 'px';
+      drawEdges();
+      drawMinimap();
+    };
+    window.addEventListener('resize', resize);
+    resize();
+
+    stage.addEventListener('pointerdown', function (event) {
+      if (event.target.closest('.fl-node') || event.target.closest('.fl-overlay')) return;
+      if (event.button !== 0) return;
+      selected = null;
+      renderInspector();
+      panDrag = { x: event.clientX, y: event.clientY, pan: Object.assign({}, view.pan) };
+      stage.classList.add('grabbing');
+      stage.setPointerCapture(event.pointerId);
+      renderNodes();
+      drawEdges();
+    });
+    stage.addEventListener('pointermove', function (event) {
+      if (!panDrag) return;
+      view.pan.x = panDrag.pan.x + (event.clientX - panDrag.x);
+      view.pan.y = panDrag.pan.y + (event.clientY - panDrag.y);
+      applyTransform();
+      drawEdges();
+      drawMinimap();
+    });
+    var endPan = function () {
+      panDrag = null;
+      stage.classList.remove('grabbing');
+    };
+    stage.addEventListener('pointerup', endPan);
+    stage.addEventListener('pointercancel', endPan);
+    stage.addEventListener('wheel', function (event) {
+      event.preventDefault();
+      zoomBy(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX, event.clientY);
+    }, { passive: false });
+    stage.addEventListener('contextmenu', function (event) {
+      if (event.target.closest('.fl-node')) return;
+      event.preventDefault();
+      selected = null;
+      renderInspector();
+      renderNodes();
+      showMenu(event.clientX, event.clientY, [
+        { label: 'Fit graph', icon: '🔭', accel: 'F', run: fit },
+        { label: 'Re-layout', icon: '♻️', accel: 'R', run: function () { positions = new Map(); refresh(true); } },
+        { label: 'Reset zoom', icon: '1️⃣', run: function () { view.zoom = 1; applyTransform(); drawEdges(); } },
+        { separator: true },
+        { label: 'Link mode', icon: '🔗', run: function () { linkMode = !linkMode; linkFrom = null; stage.classList.toggle('linking', linkMode); renderNodes(); } },
+        { label: 'Add agent node', icon: '🤖', run: addNode },
+        { separator: true },
+        { label: 'Undo graph commit', icon: '↩️', run: function () { c.undo(); } },
+        { label: 'Redo', icon: '↪️', run: function () { c.redo(); } },
+        { label: 'Open Graph Store', icon: '🕸️', run: function () { c.launch('inspector'); } },
+      ]);
+    });
+
+    minimap.addEventListener('pointerdown', function (event) {
+      var rect = minimap.getBoundingClientRect();
+      var box = bounds.ready ? bounds : computeBounds(true);
+      var scale = Math.min((minimap.width - 12) / Math.max(1, box.maxX - box.minX), (minimap.height - 12) / Math.max(1, box.maxY - box.minY));
+      var worldX = box.minX + (event.clientX - rect.left - 6) / scale;
+      var worldY = box.minY + (event.clientY - rect.top - 6) / scale;
+      view.pan.x = stageRect().width / 2 - worldX * view.zoom;
+      view.pan.y = stageRect().height / 2 - worldY * view.zoom;
+      applyTransform();
+      drawEdges();
+      drawMinimap();
+    });
+
+    var frameCount = 0;
+    var loop = function (time) {
+      frameCount++;
+      if (selected && frameCount % 4 === 0) drawEdges(time);
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  }
+
+  CloudOS.whenReady(function () {
+    statusEl = document.getElementById('fl-status');
+    rightEl = document.getElementById('fl-status-right');
+    zoomEl = document.getElementById('fl-zoom');
+    countsEl = document.getElementById('fl-counts');
+    inspectEl = document.getElementById('fl-inspect');
+    legendEl = document.getElementById('fl-legend');
+    pathEl = document.getElementById('fl-path');
+    hitsEl = document.getElementById('fl-hits');
+
+    CloudOS.connect('floret').then(function (client) {
+      c = client;
+      CloudOS.bindTheme(c);
+      setupStage();
+
+      var menus = {
+        File: [
+          { label: 'Open root filesystem', run: function () { pathEl.value = '/'; c.scan('/').then(function () { refresh(false); }); } },
+          { label: 'Scan current path', run: function () { c.scan(pathEl.value || '/').then(function () { refresh(false); }); } },
+          { separator: true },
+          { label: 'Export graph JSON', run: function () { CloudOS.download('cloudos-graph.json', c.kernel.graph.exportJSON()); } },
+          { separator: true },
+          { label: 'Close window', run: function () { c.close(); } },
+        ],
+        View: [
+          { label: 'Fit graph', accel: 'F', run: fit },
+          { label: 'Re-layout', accel: 'R', run: function () { positions = new Map(); refresh(true); } },
+          { label: 'Reset zoom', run: function () { view.zoom = 1; applyTransform(); drawEdges(); } },
+          { separator: true },
+          { label: 'Show all node types', run: function () { typeFilter.clear(); refresh(false); renderLegend(); } },
+          { label: 'Only files + directories', run: function () { typeFilter.clear(); ['file', 'dir'].forEach(function (t) { typeFilter.add(t); }); refresh(false); renderLegend(); } },
+          { label: 'Only runtime (apps/windows/procs)', run: function () { typeFilter.clear(); ['app', 'window', 'process', 'service'].forEach(function (t) { typeFilter.add(t); }); refresh(false); renderLegend(); } },
+          { separator: true },
+          { label: 'Toggle dark / XP', run: function () { function f() { c.setTheme(c.theme().mode === 'xp' ? 'dark' : 'xp'); } f(); } },
+        ],
+        Graph: [
+          { label: 'Undo commit', accel: 'Ctrl+Z', run: function () { c.undo(); } },
+          { label: 'Redo commit', accel: 'Ctrl+Shift+Z', run: function () { c.redo(); } },
+          { separator: true },
+          { label: 'Commit a snapshot', run: function () { c.kernel.graph.snapshot('floret ' + new Date().toLocaleTimeString()); statusEl.textContent = 'snapshot committed'; } },
+          { label: 'Graph stats', run: function () {
+            var s = c.graph().stats();
+            statusEl.textContent = 'v' + s.version + ' · ' + s.nodes + ' nodes · ' + s.edges + ' edges · ' + Object.keys(s.byType).map(function (t) { return t + ':' + s.byType[t]; }).join(' ');
+          } },
+          { separator: true },
+          { label: 'Open Graph Store', run: function () { c.launch('inspector'); } },
+          { label: 'Open Task Manager', run: function () { c.launch('taskmanager'); } },
+        ],
+        AI: [
+          { label: 'Open Logos 🦀', run: function () { c.launch('logos'); } },
+          { label: 'Connect Logos to Selected Node', run: function () { if (selected) connectToLogos(selected); else CloudOS.toast('Select a node first'); } },
+          { label: 'Spawn New Agent Node', run: addNode },
+        ],
+      };
+      document.getElementById('fl-menu').appendChild(CloudOS.makeMenuBar(menus).bar);
+
+      document.getElementById('fl-go').addEventListener('click', function () {
+        var path = pathEl.value || '/';
+        c.scan(path).then(function (result) {
+          if (result && result.ok) {
+            c.emit('mapped', { path: result.path, count: result.count });
+            refresh(false);
+          } else {
+            CloudOS.toast('scan failed: ' + ((result && result.error) || path), 'bad');
+          }
+        });
+      });
+      document.getElementById('fl-root').addEventListener('click', function () {
+        pathEl.value = '/';
+        c.scan('/').then(function () { refresh(true); });
+      });
+      document.getElementById('fl-in').addEventListener('click', function () { zoomBy(1.15); });
+      document.getElementById('fl-out').addEventListener('click', function () { zoomBy(1 / 1.15); });
+      document.getElementById('fl-fit').addEventListener('click', fit);
+      document.getElementById('fl-relayout').addEventListener('click', function () { positions = new Map(); refresh(true); });
+      document.getElementById('fl-link').addEventListener('click', function () {
+        linkMode = !linkMode;
+        linkFrom = null;
+        stage.classList.toggle('linking', linkMode);
+        document.getElementById('fl-link').classList.toggle('active', linkMode);
+        statusEl.textContent = linkMode ? 'link mode: click source then target node' : 'link mode off';
+        renderNodes();
+      });
+      document.getElementById('fl-add').addEventListener('click', addNode);
+      document.getElementById('fl-logos').addEventListener('click', function () {
+        c.launch('logos');
+        if (selected) {
+          var selNode = c.graph().nodes[selected];
+          setTimeout(function () {
+            c.kernel.bus.emit('Logos', 'analyze-node', { node: selNode });
+          }, 350);
+        }
+      });
+      document.getElementById('fl-search').addEventListener('input', function (event) {
+        runSearch(event.target.value);
+      });
+      document.getElementById('fl-search').addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') cycleSearch();
+      });
+      pathEl.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') document.getElementById('fl-go').click();
+      });
+
+      document.addEventListener('keydown', function (event) {
+        if (event.target.tagName === 'INPUT') return;
+        if (event.key === 'Escape') {
+          linkMode = false;
+          linkFrom = null;
+          stage.classList.remove('linking');
+          document.getElementById('fl-link').classList.remove('active');
+          renderNodes();
+        } else if (event.key.toLowerCase() === 'f') fit();
+        else if (event.key.toLowerCase() === 'r') { positions = new Map(); refresh(true); }
+        else if (event.key.toLowerCase() === 'l') document.getElementById('fl-link').click();
+      });
+
+      c.on('open-file', function (payload) {
+        if (payload && payload.path) {
+          var dir = payload.path.slice(0, payload.path.lastIndexOf('/')) || '/';
+          pathEl.value = dir;
+          c.scan(dir).then(function () { refresh(false); });
+        }
+      });
+      c.handle('get-selected', function () {
+        return { ok: true, node: selected ? c.graph().nodes[selected] : null };
+      });
+      c.on('select-node', function (payload) {
+        if (payload && payload.id) {
+          selected = payload.id;
+          centerOn(payload.id);
+          renderInspector();
+          renderNodes();
+          drawEdges();
+        }
+      });
+      c.onGraph(function () { refresh(false); renderLegend(); });
+
+      refresh(true);
+      renderLegend();
+      setInterval(function () { renderLegend(); }, 4000);
+      c.setStatus('Floret online — projection of ' + c.graph().stats().nodes + ' nodes');
+    }).catch(function (error) {
+      document.body.innerHTML = '<div class="empty">Floret could not attach to the kernel.<br>' + CloudOS.escapeHtml(error.message) + '<pre style="text-align:left;white-space:pre-wrap;font-size:10px">' + CloudOS.escapeHtml(String(error.stack || '').split('\n').slice(0, 4).join('\n')) + '</pre></div>';
+    });
+  });
+})();
+</script>
+</body>
+</html>

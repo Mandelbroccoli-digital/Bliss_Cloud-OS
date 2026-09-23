@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--cloudos-head-->
+<meta charset="utf-8">
+<title>Viewer</title>
+<style>
+  #vw-main { flex: 1; min-height: 0; display: flex; }
+  #vw-stage {
+    flex: 1; min-width: 0; overflow: auto; display: flex; align-items: center; justify-content: center;
+    background: repeating-conic-gradient(rgba(148,163,184,.07) 0% 25%, transparent 0% 50%) 50% / 22px 22px;
+    padding: 10px;
+  }
+  #vw-stage img { max-width: 100%; max-height: 100%; box-shadow: 0 10px 30px rgba(0,0,0,.45); transition: transform .12s ease; }
+  #vw-stage video { max-width: 100%; max-height: 100%; }
+  #vw-side { width: 250px; flex: none; border-left: 1px solid var(--border); overflow: auto; padding: 9px; background: var(--panel-2); }
+  #vw-text {
+    width: 100%; height: 100%; overflow: auto; margin: 0; padding: 12px; font-family: var(--mono); font-size: 12px; line-height: 1.55;
+    white-space: pre-wrap; word-break: break-word; color: var(--text); user-select: text;
+  }
+  .vw-kv { display: flex; gap: 6px; font-size: 10.5px; font-family: var(--mono); padding: 2px 0; border-bottom: 1px dashed var(--border); }
+  .vw-kv .k { color: var(--text-dim); min-width: 62px; }
+  .vw-kv .v { flex: 1; word-break: break-all; }
+  .vw-file { display: flex; align-items: center; gap: 6px; font-size: 10.5px; font-family: var(--mono); padding: 3px 5px; border-radius: 3px; cursor: pointer; }
+  .vw-file:hover { background: var(--accent-soft); }
+</style>
+</head>
+<body class="os-app">
+  <div id="vw-menu"></div>
+  <div class="toolbar">
+    <button class="tool" id="vw-open">Open path…</button>
+    <span class="tool-sep"></span>
+    <button class="tool" id="vw-fit">Fit</button>
+    <button class="tool" id="vw-actual">1:1</button>
+    <button class="tool" id="vw-zin">＋</button>
+    <button class="tool" id="vw-zout">−</button>
+    <button class="tool" id="vw-rotate">⟳</button>
+    <span class="tool-sep"></span>
+    <button class="tool" id="vw-np">Edit in Notepad</button>
+    <button class="tool" id="vw-dl">Save a copy</button>
+    <span class="spacer"></span>
+    <span class="chip" id="vw-type">–</span>
+  </div>
+  <div id="vw-main">
+    <div id="vw-stage"><div class="empty">Nothing loaded.<br>Double-click a file in Floret, or open one from the Explorer.</div></div>
+    <div id="vw-side"></div>
+  </div>
+  <div class="statusbar">
+    <span id="vw-status">ready</span>
+    <span id="vw-right"></span>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+  var c = null;
+  var current = null;
+  var zoom = 1;
+  var rotation = 0;
+  var objectUrl = null;
+
+  var IMAGE = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'];
+  var AUDIO = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac'];
+  var VIDEO = ['mp4', 'webm', 'mov', 'mkv'];
+  var TEXT = ['txt', 'md', 'json', 'js', 'mjs', 'ts', 'html', 'css', 'svg', 'log', 'toml', 'yml', 'yaml', 'py', 'rs', 'go', 'c', 'h', 'xml', 'csv'];
+
+  function esc(v) { return CloudOS.escapeHtml(v); }
+
+  function mimeFor(name) {
+    var ext = String(name).split('.').pop().toLowerCase();
+    if (ext === 'png') return 'image/png';
+    if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+    if (ext === 'gif') return 'image/gif';
+    if (ext === 'webp') return 'image/webp';
+    if (ext === 'svg') return 'image/svg+xml';
+    if (ext === 'bmp') return 'image/bmp';
+    if (ext === 'mp3') return 'audio/mpeg';
+    if (ext === 'wav') return 'audio/wav';
+    if (ext === 'ogg') return 'audio/ogg';
+    if (ext === 'flac') return 'audio/flac';
+    if (ext === 'mp4') return 'video/mp4';
+    if (ext === 'webm') return 'video/webm';
+    return 'application/octet-stream';
+  }
+
+  function kindOf(name) {
+    var ext = String(name).split('.').pop().toLowerCase();
+    if (IMAGE.indexOf(ext) >= 0) return 'image';
+    if (AUDIO.indexOf(ext) >= 0) return 'audio';
+    if (VIDEO.indexOf(ext) >= 0) return 'video';
+    if (TEXT.indexOf(ext) >= 0) return 'text';
+    return 'binary';
+  }
+
+  function releaseUrl() {
+    if (objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+      objectUrl = null;
+    }
+  }
+
+  function applyZoom() {
+    var img = document.querySelector('#vw-stage img');
+    if (img) {
+      img.style.transform = 'scale(' + zoom + ') rotate(' + rotation + 'deg)';
+    }
+    document.getElementById('vw-right').textContent = 'zoom ' + Math.round(zoom * 100) + '%' + (rotation ? ' · rot ' + rotation + '°' : '');
+  }
+
+  function open(path) {
+    if (!path) return;
+    return c.fs.readBytes(path).then(function (bytes) {
+      return c.fs.stat(path).then(function (info) {
+        current = { path: path, bytes: bytes, info: info, kind: kindOf(path) };
+        render();
+      });
+    }).catch(function (error) {
+      document.getElementById('vw-status').textContent = 'open failed: ' + error.message;
+      CloudOS.toast('Open failed: ' + error.message, 'bad');
+    });
+  }
+
+  function renderSide() {
+    var side = document.getElementById('vw-side');
+    var files = c.graph().query({ type: 'file' });
+    if (!current) {
+      side.innerHTML = '<div class="hint">No file open. Double-click a file in Floret or the Explorer, or pick one from the list below.</div>' +
+        fileListHtml(files);
+      bindSide();
+      return;
+    }
+    var name = String(current.path).split('/').pop();
+    var graphNode = c.graph().node('file:' + current.path);
+    var rows = [
+      kv('path', current.path),
+      kv('name', name),
+      kv('type', current.kind),
+      kv('bytes', CloudOS.formatBytes(current.bytes.length)),
+      kv('modified', current.info && current.info.mtime ? new Date(current.info.mtime).toLocaleString() : '-'),
+      kv('graph node', graphNode ? graphNode.id : '(not indexed — run scan)'),
+      kv('mime', mimeFor(name)),
+    ];
+    if (current.kind === 'text') {
+      var text = new TextDecoder().decode(current.bytes);
+      rows.push(kv('lines', String(text.split('\n').length)));
+      rows.push(kv('words', String(text.trim() ? text.trim().split(/\s+/).length : 0)));
+    }
+    side.innerHTML = rows.join('') + fileListHtml(files);
+    bindSide();
+  }
+
+  function fileListHtml(files) {
+    var shown = files.slice(0, 40);
+    return '<div class="panel-title" style="margin-top:9px">indexed files (' + files.length + ')</div>' +
+      (shown.length
+        ? shown.map(function (node) {
+            return '<div class="vw-file" data-path="' + esc(node.path) + '"><span>' + (node.ext && IMAGE.indexOf(node.ext) >= 0 ? '🖼️' : '📄') + '</span><span class="grow" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(node.name || node.id) + '</span></div>';
+          }).join('')
+        : '<div class="hint">Expand a directory in Floret to index files into the graph.</div>');
+  }
+
+  function bindSide() {
+    Array.prototype.forEach.call(document.querySelectorAll('#vw-side [data-path]'), function (row) {
+      row.addEventListener('click', function () { open(row.dataset.path); });
+    });
+  }
+
+  function render() {
+    releaseUrl();
+    var stage = document.getElementById('vw-stage');
+    stage.innerHTML = '';
+    zoom = 1;
+    rotation = 0;
+    renderSide();
+    if (!current) {
+      stage.innerHTML = '<div class="empty">Nothing loaded.<br>Double-click a file in Floret, or open one from the Explorer.</div>';
+      document.getElementById('vw-type').textContent = '–';
+      document.getElementById('vw-status').textContent = 'ready';
+      return;
+    }
+
+    var name = String(current.path).split('/').pop();
+    document.getElementById('vw-type').textContent = current.kind + ' · ' + CloudOS.formatBytes(current.bytes.length);
+
+    if (current.kind === 'image' || current.kind === 'audio' || current.kind === 'video') {
+      var blob = new Blob([current.bytes], { type: mimeFor(name) });
+      objectUrl = URL.createObjectURL(blob);
+      if (current.kind === 'image') {
+        var img = document.createElement('img');
+        img.src = objectUrl;
+        img.alt = name;
+        img.addEventListener('load', applyZoom);
+        stage.appendChild(img);
+      } else if (current.kind === 'audio') {
+        var audio = document.createElement('audio');
+        audio.controls = true;
+        audio.autoplay = false;
+        audio.src = objectUrl;
+        audio.style.width = '80%';
+        stage.appendChild(audio);
+      } else {
+        var video = document.createElement('video');
+        video.controls = true;
+        video.src = objectUrl;
+        stage.appendChild(video);
+      }
+    } else if (current.kind === 'text') {
+      var pre = document.createElement('div');
+      pre.id = 'vw-text';
+      pre.textContent = new TextDecoder().decode(current.bytes);
+      stage.appendChild(pre);
+      stage.style.alignItems = 'stretch';
+    } else {
+      stage.style.alignItems = 'stretch';
+      var dump = document.createElement('div');
+      dump.id = 'vw-text';
+      dump.textContent = hexDump(current.bytes);
+      stage.appendChild(dump);
+    }
+
+    if (current.kind !== 'text') stage.style.alignItems = '';
+    if (current.kind === 'text') stage.style.alignItems = 'stretch';
+
+    document.getElementById('vw-status').textContent = name + ' — ' + current.kind + ' — ' + current.path;
+    c.setTitle('Viewer — ' + name);
+  }
+
+  function hexDump(bytes) {
+    var lines = [];
+    var limit = Math.min(bytes.length, 1024);
+    for (var i = 0; i < limit; i += 16) {
+      var chunk = bytes.slice(i, i + 16);
+      var hex = [];
+      var ascii = '';
+      for (var j = 0; j < chunk.length; j++) {
+        hex.push(chunk[j].toString(16).padStart(2, '0'));
+        ascii += chunk[j] >= 32 && chunk[j] < 127 ? String.fromCharCode(chunk[j]) : '.';
+      }
+      lines.push(i.toString(16).padStart(6, '0') + '  ' + hex.join(' ').padEnd(48, ' ') + '  ' + ascii);
+    }
+    if (bytes.length > limit) lines.push('… ' + (bytes.length - limit) + ' more bytes');
+    return lines.join('\n');
+  }
+
+  function kv(key, value) {
+    return '<div class="vw-kv"><span class="k">' + esc(key) + '</span><span class="v">' + esc(value) + '</span></div>';
+  }
+
+  CloudOS.whenReady(function () {
+    CloudOS.connect('viewer').then(function (client) {
+      c = client;
+      CloudOS.bindTheme(c);
+
+      document.getElementById('vw-menu').appendChild(CloudOS.makeMenuBar({
+        File: [
+          { label: 'Open path…', run: openPrompt },
+          { label: 'Open in Notepad', run: function () { if (current) c.launch('notepad', { file: current.path }); } },
+          { label: 'Save a copy…', run: function () { if (current) CloudOS.download(String(current.path).split('/').pop(), new TextDecoder().decode(current.bytes)); } },
+          { separator: true },
+          { label: 'Close', run: function () { c.close(); } },
+        ],
+        View: [
+          { label: 'Fit', run: function () { zoom = 1; applyZoom(); } },
+          { label: 'Zoom in', run: function () { zoom = Math.min(6, zoom + 0.2); applyZoom(); } },
+          { label: 'Zoom out', run: function () { zoom = Math.max(0.1, zoom - 0.2); applyZoom(); } },
+          { label: 'Rotate 90°', run: function () { rotation = (rotation + 90) % 360; applyZoom(); } },
+          { separator: true },
+          { label: 'Toggle dark / XP', run: function () { c.setTheme(c.theme().mode === 'xp' ? 'dark' : 'xp'); } },
+        ],
+      }).bar);
+
+      function openPrompt() {
+        var path = prompt('Open path:', current ? current.path : '/home/Pictures/graph-paper.txt');
+        if (path) open(path);
+      }
+
+      document.getElementById('vw-open').addEventListener('click', openPrompt);
+      document.getElementById('vw-fit').addEventListener('click', function () { zoom = 1; rotation = 0; applyZoom(); });
+      document.getElementById('vw-actual').addEventListener('click', function () { zoom = 1; applyZoom(); });
+      document.getElementById('vw-zin').addEventListener('click', function () { zoom = Math.min(6, zoom + 0.2); applyZoom(); });
+      document.getElementById('vw-zout').addEventListener('click', function () { zoom = Math.max(0.1, zoom - 0.2); applyZoom(); });
+      document.getElementById('vw-rotate').addEventListener('click', function () { rotation = (rotation + 90) % 360; applyZoom(); });
+      document.getElementById('vw-np').addEventListener('click', function () { if (current) c.launch('notepad', { file: current.path }); });
+      document.getElementById('vw-dl').addEventListener('click', function () {
+        if (!current) return;
+        var blob = new Blob([current.bytes], { type: mimeFor(current.path) });
+        var url = URL.createObjectURL(blob);
+        var link = document.createElement('a');
+        link.href = url;
+        link.download = String(current.path).split('/').pop();
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 3000);
+      });
+
+      c.on('open-file', function (payload) {
+        if (payload && payload.path) open(payload.path);
+      });
+
+      var start = c.BOOT && c.BOOT.file;
+      if (start) open(start);
+      else render();
+      c.onGraph(function () { renderSide(); });
+      c.setStatus('Viewer ready');
+    }).catch(function (error) {
+      document.body.innerHTML = '<div class="empty">Viewer could not attach to the kernel.<br>' + esc(error.message) + '</div>';
+    });
+  });
+})();
+</script>
+</body>
+</html>

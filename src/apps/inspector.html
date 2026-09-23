@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--cloudos-head-->
+<meta charset="utf-8">
+<title>Graph Store</title>
+<style>
+  .tabs { display: flex; gap: 3px; }
+  .tab { padding: 4px 12px; border: 1px solid var(--border); border-bottom: 0; border-radius: 5px 5px 0 0; background: var(--panel-2); cursor: pointer; font-size: 11px; color: var(--text-dim); }
+  .tab.active { background: var(--panel-solid); color: var(--text-strong); font-weight: 600; }
+  #gs-main { flex: 1; min-height: 0; display: flex; }
+  #gs-list { flex: 1; min-width: 0; overflow: auto; }
+  #gs-detail { width: 330px; flex: none; border-left: 1px solid var(--border); overflow: auto; padding: 9px; background: var(--panel-2); }
+  .gs-kv { display: flex; gap: 6px; font-size: 10.5px; font-family: var(--mono); border-bottom: 1px dashed var(--border); padding: 3px 0; }
+  .gs-kv .k { color: var(--text-dim); min-width: 86px; }
+  .gs-kv .v { flex: 1; word-break: break-all; }
+  .gs-action { font-size: 10.5px; padding: 3px 7px; }
+  .hist-row { display: grid; grid-template-columns: 26px 50px 1fr 150px; gap: 8px; padding: 4px 8px; font-size: 11px; font-family: var(--mono); cursor: pointer; border-bottom: 1px solid var(--border); }
+  .hist-row:hover { background: var(--accent-soft); }
+  .hist-row.current { background: var(--accent); color: #fff; }
+  .hist-row.future { opacity: .45; }
+  .bus-row { display: grid; grid-template-columns: 78px 190px 1fr; gap: 8px; padding: 3px 8px; font-size: 10.5px; font-family: var(--mono); border-bottom: 1px solid var(--border); }
+  .bus-row:hover { background: var(--accent-soft); }
+  .bar-row { display: grid; grid-template-columns: 90px 1fr 40px; gap: 8px; align-items: center; font-size: 10.5px; font-family: var(--mono); padding: 2px 0; }
+  .bar { height: 9px; background: var(--accent); border-radius: 2px; min-width: 2px; }
+  .bar-wrap { background: var(--panel-2); border-radius: 2px; overflow: hidden; }
+</style>
+</head>
+<body class="os-app">
+  <div id="gs-menu"></div>
+  <div class="toolbar">
+    <div class="tabs" id="gs-tabs">
+      <div class="tab active" data-tab="nodes">Nodes</div>
+      <div class="tab" data-tab="edges">Edges</div>
+      <div class="tab" data-tab="history">Transactions</div>
+      <div class="tab" data-tab="snapshots">Snapshots</div>
+      <div class="tab" data-tab="bus">Bus</div>
+    </div>
+    <span class="tool-sep"></span>
+    <input class="field" id="gs-filter" placeholder="filter…" style="width:170px">
+    <button class="tool" id="gs-undo">↩ Undo</button>
+    <button class="tool" id="gs-redo">↪ Redo</button>
+    <span class="spacer"></span>
+    <span class="chip" id="gs-ver">v0</span>
+  </div>
+
+  <div id="gs-main">
+    <div id="gs-list"></div>
+    <div id="gs-detail"><div class="empty">Select a node, edge or commit.</div></div>
+  </div>
+
+  <div class="statusbar">
+    <span id="gs-status">ready</span>
+    <span id="gs-right"></span>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+  var c = null;
+  var tab = 'nodes';
+  var filter = '';
+  var selectedNode = null;
+  var selectedEdge = null;
+  var busPaused = false;
+  var busLog = [];
+  var renderQueued = false;
+
+  function esc(v) { return CloudOS.escapeHtml(v); }
+
+  function graph() { return c.graph(); }
+
+  function nodeLabel(node) {
+    return node.name || node.title || node.path || node.id;
+  }
+
+  function styleOf(type) {
+    return c.kernel.NODE_STYLE[type] || { icon: '❓', color: '#94a3b8' };
+  }
+
+  function queueRender() {
+    if (renderQueued) return;
+    renderQueued = true;
+    setTimeout(function () {
+      renderQueued = false;
+      render();
+    }, 90);
+  }
+
+  function setStatus(text) {
+    document.getElementById('gs-status').textContent = text;
+  }
+
+  function render() {
+    var store = graph();
+    var stats = store.stats();
+    document.getElementById('gs-ver').textContent = 'v' + stats.version + ' · ' + stats.nodes + 'n · ' + stats.edges + 'e';
+    document.getElementById('gs-undo').disabled = !c.kernel.graph.canUndo;
+    document.getElementById('gs-redo').disabled = !c.kernel.graph.canRedo;
+    document.getElementById('gs-right').textContent = 'canUndo=' + c.kernel.graph.canUndo + ' canRedo=' + c.kernel.graph.canRedo + ' · history ' + c.kernel.graph.history.length;
+    Array.prototype.forEach.call(document.querySelectorAll('#gs-tabs .tab'), function (el) {
+      el.classList.toggle('active', el.dataset.tab === tab);
+    });
+    if (tab === 'nodes') renderNodes();
+    else if (tab === 'edges') renderEdges();
+    else if (tab === 'history') renderHistory();
+    else if (tab === 'snapshots') renderSnapshots();
+    else renderBus();
+  }
+
+  function renderNodes() {
+    var store = graph();
+    var host = document.getElementById('gs-list');
+    var list = Object.keys(store.nodes).map(function (id) { return store.nodes[id]; });
+    if (filter) {
+      var needle = filter.toLowerCase();
+      list = list.filter(function (node) {
+        return (node.id + ' ' + node.type + ' ' + nodeLabel(node) + ' ' + (node.path || '')).toLowerCase().indexOf(needle) >= 0;
+      });
+    }
+    var byType = {};
+    list.forEach(function (node) { byType[node.type] = (byType[node.type] || 0) + 1; });
+    host.innerHTML =
+      '<table class="grid"><thead><tr><th>node</th><th>type</th><th>name</th><th>deg</th><th>source</th></tr></thead><tbody>' +
+      list.map(function (node) {
+        var style = styleOf(node.type);
+        var degree = store.edgesFrom(node.id).length + store.edgesTo(node.id).length;
+        return '<tr data-id="' + esc(node.id) + '">' +
+          '<td>' + esc(node.id) + '</td>' +
+          '<td style="color:' + style.color + '">' + esc(node.type) + '</td>' +
+          '<td>' + esc(nodeLabel(node)) + '</td>' +
+          '<td>' + degree + '</td>' +
+          '<td>' + esc(node.source || (node.auto ? 'auto' : node.createdBy || 'manual')) + '</td>' +
+          '</tr>';
+      }).join('') +
+      '</tbody></table>';
+    Array.prototype.forEach.call(host.querySelectorAll('tr[data-id]'), function (row) {
+      row.addEventListener('click', function () {
+        selectedNode = row.dataset.id;
+        selectedEdge = null;
+        renderDetail();
+      });
+    });
+    setStatus(list.length + ' nodes' + (filter ? ' matching "' + filter + '"' : '') + ' · ' +
+      Object.keys(byType).map(function (t) { return t + ':' + byType[t]; }).join(' '));
+  }
+
+  function renderEdges() {
+    var store = graph();
+    var host = document.getElementById('gs-list');
+    var list = Object.keys(store.edges).map(function (id) { return store.edges[id]; });
+    if (filter) {
+      var needle = filter.toLowerCase();
+      list = list.filter(function (edge) {
+        return (edge.id + ' ' + edge.kind + ' ' + edge.from + ' ' + edge.to).toLowerCase().indexOf(needle) >= 0;
+      });
+    }
+    var byKind = {};
+    list.forEach(function (edge) { byKind[edge.kind] = (byKind[edge.kind] || 0) + 1; });
+    host.innerHTML =
+      '<table class="grid"><thead><tr><th>edge</th><th>kind</th><th>from</th><th>to</th></tr></thead><tbody>' +
+      list.map(function (edge) {
+        var style = c.kernel.EDGE_STYLE[edge.kind] || { color: '#64748b' };
+        return '<tr data-id="' + esc(edge.id) + '">' +
+          '<td>' + esc(edge.id) + '</td>' +
+          '<td style="color:' + style.color + '">' + esc(edge.kind) + '</td>' +
+          '<td>' + esc(edge.from) + '</td>' +
+          '<td>' + esc(edge.to) + '</td>' +
+          '</tr>';
+      }).join('') + '</tbody></table>';
+    Array.prototype.forEach.call(host.querySelectorAll('tr[data-id]'), function (row) {
+      row.addEventListener('click', function () {
+        selectedEdge = row.dataset.id;
+        selectedNode = null;
+        renderDetail();
+      });
+    });
+    setStatus(list.length + ' edges · ' + Object.keys(byKind).map(function (k) { return k + ':' + byKind[k]; }).join(' '));
+  }
+
+  function renderHistory() {
+    var host = document.getElementById('gs-list');
+    var entries = c.kernel.graph.history;
+    host.innerHTML = entries.map(function (entry) {
+      return '<div class="hist-row ' + (entry.current ? 'current ' : '') + (entry.index > c.kernel.graph.cursor ? 'future' : '') + '" data-index="' + entry.index + '">' +
+        '<span>' + (entry.current ? '▶' : entry.index) + '</span>' +
+        '<span>v' + entry.version + '</span>' +
+        '<span>' + esc(entry.label) + '</span>' +
+        '<span>' + esc(CloudOS.clockTime(entry.at)) + ' · ' + entry.nodes + ' nodes</span>' +
+        '</div>';
+    }).join('');
+    Array.prototype.forEach.call(host.querySelectorAll('.hist-row'), function (row) {
+      row.addEventListener('click', function () {
+        var index = Number(row.dataset.index);
+        c.kernel.graph.jumpTo(index);
+        setStatus('time travelled to commit #' + index + ' — the whole OS state is now that version');
+        render();
+      });
+    });
+    setStatus(entries.length + ' transactions retained (undo stack + future). Click any row to time travel.');
+  }
+
+  function renderSnapshots() {
+    var host = document.getElementById('gs-list');
+    c.call('Kernel', 'graph:snapshots').then(function (result) {
+      host.innerHTML =
+        '<div class="panel" style="margin:9px"><div class="panel-title">Named snapshots</div>' +
+        '<div style="display:flex;gap:6px;margin-bottom:8px">' +
+        '<input class="field" id="gs-snap-name" placeholder="snapshot name" style="flex:1">' +
+        '<button class="tool" id="gs-snap-save">Save snapshot</button>' +
+        '<button class="tool" id="gs-export">Export JSON</button>' +
+        '<button class="tool" id="gs-import">Import JSON</button>' +
+        '<button class="tool" id="gs-reset">Reset graph</button>' +
+        '</div>' +
+        (result.snapshots.length
+          ? result.snapshots.map(function (item) {
+              return '<div class="list-row"><span>📸</span><span class="grow">' + esc(item.name) + '</span>' +
+                '<span class="dim mono">v' + item.version + ' · ' + item.nodes + ' nodes · ' + esc(CloudOS.relTime(item.at)) + '</span>' +
+                '<button class="tool gs-action" data-restore="' + esc(item.name) + '">Restore</button>' +
+                '<button class="tool gs-action" data-del="' + esc(item.name) + '">Delete</button></div>';
+            }).join('')
+          : '<div class="empty">No snapshots yet. Snapshots are stored in local storage and survive reloads.</div>') +
+        '</div>';
+
+      document.getElementById('gs-snap-save').addEventListener('click', function () {
+        var name = document.getElementById('gs-snap-name').value || 'snapshot ' + new Date().toLocaleTimeString();
+        c.call('Kernel', 'graph:snapshot', { name: name }).then(function () {
+          CloudOS.toast('Snapshot saved: ' + name, 'good');
+          renderSnapshots();
+        });
+      });
+      document.getElementById('gs-export').addEventListener('click', function () {
+        CloudOS.download('cloudos-graph.json', c.kernel.graph.exportJSON());
+      });
+      document.getElementById('gs-import').addEventListener('click', function () {
+        CloudOS.pickFile('application/json').then(function (file) {
+          if (!file) return;
+          file.text().then(function (text) {
+            try {
+              c.kernel.graph.importJSON(text, 'imported ' + file.name);
+              CloudOS.toast('Graph imported', 'good');
+              renderSnapshots();
+            } catch (error) {
+              CloudOS.toast('Import failed: ' + error.message, 'bad');
+            }
+          });
+        });
+      });
+      document.getElementById('gs-reset').addEventListener('click', function () {
+        if (!confirm('Factory reset: clear the persisted graph and reboot the shell with a fresh bootstrap graph?')) return;
+        c.kernel.bus.emit('Shell', 'factory-reset', {});
+      });
+      Array.prototype.forEach.call(host.querySelectorAll('[data-restore]'), function (button) {
+        button.addEventListener('click', function () {
+          c.call('Kernel', 'graph:restore-snapshot', { name: button.dataset.restore }).then(function () {
+            CloudOS.toast('Restored ' + button.dataset.restore, 'good');
+            render();
+            renderSnapshots();
+          });
+        });
+      });
+      Array.prototype.forEach.call(host.querySelectorAll('[data-del]'), function (button) {
+        button.addEventListener('click', function () {
+          c.call('Kernel', 'graph:delete-snapshot', { name: button.dataset.del }).then(function () {
+            renderSnapshots();
+          });
+        });
+      });
+      setStatus(result.snapshots.length + ' snapshots · keys: cloudos.graph.v1 / cloudos.graph.snapshots.v1');
+    });
+  }
+
+  function renderBus() {
+    var host = document.getElementById('gs-list');
+    var stats = c.kernel.bus.stats();
+    var top = Object.keys(stats.byEvent).map(function (key) {
+      return { key: key, count: stats.byEvent[key] };
+    }).sort(function (a, b) { return b.count - a.count; }).slice(0, 14);
+    var max = top.length ? top[0].count : 1;
+
+    host.innerHTML =
+      '<div class="panel" style="margin:9px">' +
+      '<div class="panel-title">Bus throughput</div>' +
+      '<div class="bar-row"><span>emitted</span><span class="bar-wrap"><span class="bar" style="width:100%"></span></span><span>' + stats.emitted + '</span></div>' +
+      '<div class="bar-row"><span>listeners</span><span class="bar-wrap"><span class="bar" style="width:' + Math.min(100, stats.listenerCount * 5) + '%"></span></span><span>' + stats.listenerCount + '</span></div>' +
+      '<div class="bar-row"><span>history</span><span class="bar-wrap"><span class="bar" style="width:' + Math.min(100, (stats.history / 600) * 100) + '%"></span></span><span>' + stats.history + '</span></div>' +
+      top.map(function (item) {
+        return '<div class="bar-row"><span>' + esc(item.key) + '</span><span class="bar-wrap"><span class="bar" style="width:' + ((item.count / max) * 100) + '%"></span></span><span>' + item.count + '</span></div>';
+      }).join('') +
+      '</div>' +
+      '<div style="display:flex;gap:6px;padding:0 9px 6px"><button class="tool" id="gs-bus-pause">' + (busPaused ? '▶ Resume' : '⏸ Pause') + '</button>' +
+      '<button class="tool" id="gs-bus-clear">Clear log</button>' +
+      '<label style="font-size:10px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="gs-bus-only" checked> only graph mutations</label></div>' +
+      '<div id="gs-bus-log">' + busLog.map(busRow).join('') + '</div>';
+
+    document.getElementById('gs-bus-pause').addEventListener('click', function () {
+      busPaused = !busPaused;
+      renderBus();
+    });
+    document.getElementById('gs-bus-clear').addEventListener('click', function () {
+      busLog = [];
+      renderBus();
+    });
+    document.getElementById('gs-bus-only').addEventListener('change', renderBus);
+    setStatus(stats.emitted + ' events emitted · ' + stats.listenerCount + ' listeners · ' + Object.keys(stats.byEvent).length + ' distinct events');
+  }
+
+  function busRow(env) {
+    var onlyGraph = document.getElementById('gs-bus-only');
+    if (onlyGraph && onlyGraph.checked && !(env.event === 'graph:changed' || env.event.indexOf('graph:') === 0 || env.event.indexOf('fs:') === 0)) {
+      return '';
+    }
+    var payload = env.payload;
+    var summary;
+    if (payload && payload.__truncated) summary = '[graph payload ' + payload.bytes + ' bytes]';
+    else if (payload && payload.stats) summary = 'v' + payload.version + ' ' + (payload.label || '') + ' → ' + payload.stats.nodes + 'n/' + payload.stats.edges + 'e';
+    else summary = JSON.stringify(payload);
+    return '<div class="bus-row"><span class="dim">' + esc(CloudOS.clockTime(env.at)) + '</span>' +
+      '<span>' + esc(env.scope + ':' + env.event) + '</span>' +
+      '<span class="dim">' + esc(String(summary).slice(0, 160)) + '</span></div>';
+  }
+
+  function renderDetail() {
+    var host = document.getElementById('gs-detail');
+    var store = graph();
+    if (selectedEdge && store.edges[selectedEdge]) {
+      var edge = store.edges[selectedEdge];
+      var edgeStyle = c.kernel.EDGE_STYLE[edge.kind] || { color: '#64748b' };
+      host.innerHTML =
+        '<h5 style="margin:0 0 6px;font-size:12px">🔗 edge</h5>' +
+        kv('id', edge.id) + kv('kind', edge.kind) + kv('from', edge.from) + kv('to', edge.to) +
+        '<div class="acts" style="margin-top:8px;display:flex;gap:4px;flex-wrap:wrap">' +
+        '<button class="tool gs-action" data-inspect="' + esc(edge.from) + '">Inspect source</button>' +
+        '<button class="tool gs-action" data-inspect="' + esc(edge.to) + '">Inspect target</button>' +
+        '<button class="tool gs-action" data-unlink="' + esc(edge.id) + '">Delete edge</button></div>';
+      bindDetailActions();
+      return;
+    }
+    if (!selectedNode || !store.nodes[selectedNode]) {
+      host.innerHTML = '<div class="empty">Select a node, edge or commit.<br><br>The graph is the canonical state: everything the desktop shows is projected from these rows.</div>';
+      return;
+    }
+    var node = store.nodes[selectedNode];
+    var style = styleOf(node.type);
+    var outs = store.edgesFrom(node.id);
+    var ins = store.edgesTo(node.id);
+    var html = '<h5 style="margin:0 0 6px;font-size:12px">' + esc(style.icon + ' ' + nodeLabel(node)) + '</h5>';
+    Object.keys(node).forEach(function (key) {
+      var value = node[key];
+      if (value && typeof value === 'object') value = JSON.stringify(value);
+      html += kv(key, value);
+    });
+    html += '<div class="panel-title" style="margin-top:8px">outgoing (' + outs.length + ')</div>';
+    outs.forEach(function (edge) {
+      html += '<div class="list-row" data-inspect="' + esc(edge.to) + '"><span>→</span><span class="grow">' + esc(edge.kind) + ' ' + esc(edge.to) + '</span></div>';
+    });
+    html += '<div class="panel-title" style="margin-top:8px">incoming (' + ins.length + ')</div>';
+    ins.forEach(function (edge) {
+      html += '<div class="list-row" data-inspect="' + esc(edge.from) + '"><span>←</span><span class="grow">' + esc(edge.kind) + ' ' + esc(edge.from) + '</span></div>';
+    });
+    html += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px">' +
+      '<button class="tool gs-action" data-floret="' + esc(node.id) + '">Show in Floret</button>' +
+      '<button class="tool gs-action" data-copy="' + esc(node.id) + '">Copy id</button>' +
+      '<button class="tool gs-action" data-patch="' + esc(node.id) + '">Patch…</button>' +
+      '<button class="tool gs-action" data-delete="' + esc(node.id) + '">Delete node</button>' +
+      '</div>';
+    host.innerHTML = html;
+    bindDetailActions();
+  }
+
+  function kv(key, value) {
+    return '<div class="gs-kv"><span class="k">' + esc(key) + '</span><span class="v">' + esc(String(value)) + '</span></div>';
+  }
+
+  function bindDetailActions() {
+    var host = document.getElementById('gs-detail');
+    Array.prototype.forEach.call(host.querySelectorAll('[data-inspect]'), function (row) {
+      row.addEventListener('click', function () {
+        selectedNode = row.dataset.inspect;
+        selectedEdge = null;
+        renderDetail();
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-unlink]'), function (button) {
+      button.addEventListener('click', function () {
+        c.commit({ label: 'unlink ' + button.dataset.unlink, deleteEdges: [button.dataset.unlink] });
+        selectedEdge = null;
+        renderDetail();
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-copy]'), function (button) {
+      button.addEventListener('click', function () {
+        if (navigator.clipboard) navigator.clipboard.writeText(button.dataset.copy);
+        setStatus('copied ' + button.dataset.copy);
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-floret]'), function (button) {
+      button.addEventListener('click', function () {
+        c.launch('floret');
+        c.kernel.bus.emit('Floret', 'focus-node', { id: button.dataset.floret });
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-patch]'), function (button) {
+      button.addEventListener('click', function () {
+        var pair = prompt('Patch property (key=value):', 'status=idle');
+        if (!pair) return;
+        var eq = pair.indexOf('=');
+        if (eq < 0) return;
+        var key = pair.slice(0, eq);
+        var raw = pair.slice(eq + 1);
+        var value = /^-?\d+(\.\d+)?$/.test(raw) ? Number(raw) : raw;
+        c.call('Kernel', 'graph:patch-node', { id: button.dataset.patch, patch: (function () { var p = {}; p[key] = value; return p; })() });
+        renderDetail();
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-delete]'), function (button) {
+      button.addEventListener('click', function () {
+        if (!confirm('Delete node ' + button.dataset.delete + '? Incident edges go too — Ctrl+Z brings it back.')) return;
+        c.commit({ label: 'delete ' + button.dataset.delete, deleteNodes: [button.dataset.delete] });
+        selectedNode = null;
+        renderDetail();
+      });
+    });
+  }
+
+  CloudOS.whenReady(function () {
+    CloudOS.connect('inspector').then(function (client) {
+      c = client;
+      CloudOS.bindTheme(c);
+
+      document.getElementById('gs-menu').appendChild(CloudOS.makeMenuBar({
+        Graph: [
+          { label: 'Undo', accel: 'Ctrl+Z', run: function () { c.undo(); } },
+          { label: 'Redo', accel: 'Ctrl+Shift+Z', run: function () { c.redo(); } },
+          { separator: true },
+          { label: 'Snapshot…', run: function () { tab = 'snapshots'; render(); } },
+          { label: 'Export graph JSON', run: function () { CloudOS.download('cloudos-graph.json', c.kernel.graph.exportJSON()); } },
+          { separator: true },
+          { label: 'Reap orphaned processes', run: function () {
+            var live = {};
+            (c.state.windows || []).forEach(function (win) { live[win.instance] = true; });
+            var orphans = graph().query({ type: 'process', where: function (node) { return node.appId && !live[node.instance]; } }).map(function (node) { return node.id; });
+            if (orphans.length) c.commit({ label: 'reap orphaned processes', deleteNodes: orphans });
+            setStatus(orphans.length ? 'reaped ' + orphans.length + ' orphaned process nodes' : 'no orphaned processes');
+          } },
+        ],
+        View: [
+          { label: 'Nodes', run: function () { tab = 'nodes'; render(); } },
+          { label: 'Edges', run: function () { tab = 'edges'; render(); } },
+          { label: 'Transactions', run: function () { tab = 'history'; render(); } },
+          { label: 'Bus monitor', run: function () { tab = 'bus'; render(); } },
+          { separator: true },
+          { label: 'Toggle dark / XP', run: function () { c.setTheme(c.theme().mode === 'xp' ? 'dark' : 'xp'); } },
+        ],
+        Window: [{ label: 'Close', run: function () { c.close(); } }],
+      }).bar);
+
+      Array.prototype.forEach.call(document.querySelectorAll('#gs-tabs .tab'), function (el) {
+        el.addEventListener('click', function () {
+          tab = el.dataset.tab;
+          render();
+        });
+      });
+
+      document.getElementById('gs-filter').addEventListener('input', function (event) {
+        filter = event.target.value;
+        render();
+      });
+      document.getElementById('gs-undo').addEventListener('click', function () { c.undo(); });
+      document.getElementById('gs-redo').addEventListener('click', function () { c.redo(); });
+
+      c.onLog(function (env) {
+        if (busPaused) return;
+        busLog.unshift(env);
+        if (busLog.length > 260) busLog.pop();
+        if (tab === 'bus' && !renderQueued) {
+          setTimeout(function () {
+            var log = document.getElementById('gs-bus-log');
+            if (log) log.innerHTML = busLog.map(busRow).join('');
+          }, 120);
+        }
+      });
+
+      c.onGraph(function (event) {
+        if (event.action === 'commit' && event.tx && event.tx.label) setStatus('commit: ' + event.tx.label);
+        queueRender();
+      });
+      c.on('focus-node', function () {});
+
+      render();
+      setStatus('watching graph v' + graph().version + ' — ' + graph().stats().nodes + ' nodes, ' + graph().stats().edges + ' edges');
+      c.setStatus('Graph Store attached');
+    }).catch(function (error) {
+      document.body.innerHTML = '<div class="empty">Graph Store could not attach to the kernel.<br>' + esc(error.message) + '</div>';
+    });
+  });
+})();
+</script>
+</body>
+</html>

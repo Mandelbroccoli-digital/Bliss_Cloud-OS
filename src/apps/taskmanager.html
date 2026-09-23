@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--cloudos-head-->
+<meta charset="utf-8">
+<title>Task Manager</title>
+<style>
+  .tabs { display: flex; gap: 3px; }
+  .tab { padding: 4px 12px; border: 1px solid var(--border); border-bottom: 0; border-radius: 5px 5px 0 0; background: var(--panel-2); cursor: pointer; font-size: 11px; color: var(--text-dim); }
+  .tab.active { background: var(--panel-solid); color: var(--text-strong); font-weight: 600; }
+  #tm-main { flex: 1; min-height: 0; overflow: auto; padding: 8px; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 10px; }
+  .stat-card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 9px 11px; }
+  .stat-card .v { font-size: 20px; font-weight: 300; color: var(--text-strong); font-variant-numeric: tabular-nums; }
+  .stat-card .k { font-size: 9.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-dim); }
+  .bar-row { display: grid; grid-template-columns: 96px 1fr 46px; gap: 8px; align-items: center; font-size: 10.5px; font-family: var(--mono); padding: 2px 0; }
+  .bar { height: 9px; border-radius: 2px; background: var(--accent); min-width: 2px; }
+  .bar-wrap { background: var(--panel-2); border-radius: 2px; overflow: hidden; }
+  #tm-perf { width: 100%; height: 170px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; display: block; }
+  .spark-label { font-size: 10px; color: var(--text-dim); font-family: var(--mono); }
+  .grow { flex: 1; }
+</style>
+</head>
+<body class="os-app">
+  <div id="tm-menu"></div>
+  <div class="toolbar">
+    <div class="tabs" id="task-tabs-nav">
+      <div class="tab active" data-tab="processes">Processes</div>
+      <div class="tab" data-tab="windows">Windows</div>
+      <div class="tab" data-tab="graph">Graph</div>
+      <div class="tab" data-tab="perf">Performance</div>
+    </div>
+    <span class="tool-sep"></span>
+    <button class="tool" id="task-refresh">Refresh</button>
+    <span class="spacer"></span>
+    <span class="chip" id="task-chip">–</span>
+  </div>
+  <div id="tm-main"></div>
+  <div class="statusbar">
+    <span id="task-status">ready</span>
+    <span id="task-right"></span>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+  var c = null;
+  var tab = 'processes';
+  var windows = [];
+  var samples = [];
+  var lastEmitted = null;
+  var lastAt = Date.now();
+  var timer = null;
+
+  function esc(v) { return CloudOS.escapeHtml(v); }
+  function graph() { return c.graph(); }
+
+  function setStatus(text) {
+    document.getElementById('task-status').textContent = text;
+  }
+
+  function render() {
+    Array.prototype.forEach.call(document.querySelectorAll('#task-tabs-nav .tab'), function (el) {
+      el.classList.toggle('active', el.dataset.tab === tab);
+    });
+    var stats = graph().stats();
+    document.getElementById('task-chip').textContent = 'v' + stats.version + ' · ' + stats.nodes + 'n · ' + stats.edges + 'e';
+    if (tab === 'processes') renderProcesses();
+    else if (tab === 'windows') renderWindows();
+    else if (tab === 'graph') renderGraph();
+    else renderPerf();
+  }
+
+  function renderProcesses() {
+    var host = document.getElementById('tm-main');
+    var list = graph().query({ type: 'process' });
+    var byId = graph().nodes;
+    host.innerHTML =
+      '<table class="grid"><thead><tr><th>pid</th><th>name</th><th>app</th><th>status</th><th>window</th><th>started</th><th></th></tr></thead><tbody>' +
+      list.sort(function (a, b) { return (a.pid || 0) - (b.pid || 0); }).map(function (node) {
+        var winNode = node.windowId ? byId['win:' + node.windowId] : null;
+        return '<tr><td>' + (node.pid || '-') + '</td>' +
+          '<td>' + esc(node.name) + (node.system ? ' <span class="badge">system</span>' : '') + '</td>' +
+          '<td>' + esc(node.appId || '-') + '</td>' +
+          '<td style="color:var(--good)">' + esc(node.status || 'running') + '</td>' +
+          '<td class="dim">' + esc(winNode ? winNode.title : (node.windowId || '-')) + '</td>' +
+          '<td class="dim">' + esc(node.startedAt ? CloudOS.clockTime(node.startedAt) : '-') + '</td>' +
+          '<td>' + (node.instance ? '<button class="tool" data-end="' + esc(node.instance) + '" style="font-size:10px;padding:2px 6px">End task</button>' : '') + '</td>' +
+          '</tr>';
+      }).join('') + '</tbody></table>';
+    Array.prototype.forEach.call(host.querySelectorAll('[data-end]'), function (button) {
+      button.addEventListener('click', function () {
+        c.kernel.bus.emit('Shell', 'close-app', { instance: button.dataset.end });
+        setStatus('ending task ' + button.dataset.end);
+        setTimeout(render, 400);
+      });
+    });
+    setStatus(list.length + ' process nodes · ' + list.filter(function (node) { return node.appId; }).length + ' app instances');
+  }
+
+  function renderWindows() {
+    var host = document.getElementById('tm-main');
+    var store = graph();
+    var list = windows.length ? windows : store.query({ type: 'window' }).map(function (node) {
+      return { instance: node.instance, appId: node.appId, title: node.title, file: node.file, minimized: node.minimized, maximized: node.maximized, docked: node.docked, bounds: { x: node.x, y: node.y, w: node.w, h: node.h }, focused: false };
+    });
+    host.innerHTML =
+      '<table class="grid"><thead><tr><th>title</th><th>app</th><th>instance</th><th>rect</th><th>state</th><th>file</th><th></th></tr></thead><tbody>' +
+      list.map(function (win) {
+        var state = (win.minimized ? 'min ' : '') + (win.maximized ? 'max ' : '') + (win.docked ? 'dock-' + win.docked : '') || 'floating';
+        return '<tr><td>' + (win.focused ? '▶ ' : '') + esc(win.title) + '</td>' +
+          '<td>' + esc(win.appId) + '</td>' +
+          '<td class="dim">' + esc(String(win.instance).slice(-14)) + '</td>' +
+          '<td class="dim">' + win.bounds.x + ',' + win.bounds.y + ' ' + Math.round(win.bounds.w) + '×' + Math.round(win.bounds.h) + '</td>' +
+          '<td class="dim">' + esc(state) + '</td>' +
+          '<td class="dim">' + esc(win.file ? String(win.file).split('/').pop() : '-') + '</td>' +
+          '<td style="white-space:nowrap">' +
+          '<button class="tool" data-focus="' + esc(win.instance) + '" style="font-size:10px;padding:2px 6px">Focus</button> ' +
+          '<button class="tool" data-min="' + esc(win.instance) + '" style="font-size:10px;padding:2px 6px">Min</button> ' +
+          '<button class="tool" data-max="' + esc(win.instance) + '" style="font-size:10px;padding:2px 6px">Max</button> ' +
+          '<button class="tool" data-close="' + esc(win.instance) + '" style="font-size:10px;padding:2px 6px">Close</button>' +
+          '</td></tr>';
+      }).join('') + '</tbody></table>';
+    Array.prototype.forEach.call(host.querySelectorAll('[data-focus]'), function (button) {
+      button.addEventListener('click', function () { c.kernel.bus.emit('Shell', 'focus-app', { instance: button.dataset.focus }); });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-min]'), function (button) {
+      button.addEventListener('click', function () { c.kernel.bus.emit('Shell', 'minimize-app', { instance: button.dataset.min }); });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-max]'), function (button) {
+      button.addEventListener('click', function () { c.kernel.bus.emit('Shell', 'maximize-app', { instance: button.dataset.max }); });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-close]'), function (button) {
+      button.addEventListener('click', function () { c.kernel.bus.emit('Shell', 'close-app', { instance: button.dataset.close }); });
+    });
+    setStatus(list.length + ' windows — each one is a `window` node owned by a process node');
+    c.kernel.bus.emit('Shell', 'windows-request', {});
+  }
+
+  function renderGraph() {
+    var host = document.getElementById('tm-main');
+    var stats = graph().stats();
+    var byType = stats.byType;
+    var byKind = stats.byKind;
+    var maxType = Math.max.apply(null, Object.keys(byType).map(function (t) { return byType[t]; }).concat([1]));
+    var maxKind = Math.max.apply(null, Object.keys(byKind).map(function (k) { return byKind[k]; }).concat([1]));
+
+    host.innerHTML =
+      '<div class="stat-grid">' +
+      stat('nodes', stats.nodes) + stat('edges', stats.edges) + stat('version', stats.version) +
+      stat('history', c.kernel.graph.history.length) + stat('listeners', c.kernel.bus.listenerCount) + stat('events', c.kernel.bus.stats().emitted) +
+      '</div>' +
+      '<div class="panel" style="margin-bottom:8px"><div class="panel-title">nodes by type</div>' +
+      Object.keys(byType).sort().map(function (type) {
+        var style = c.kernel.NODE_STYLE[type] || { color: '#64748b' };
+        return '<div class="bar-row"><span>' + esc(type) + '</span><span class="bar-wrap"><span class="bar" style="width:' + ((byType[type] / maxType) * 100) + '%;background:' + style.color + '"></span></span><span>' + byType[type] + '</span></div>';
+      }).join('') + '</div>' +
+      '<div class="panel"><div class="panel-title">edges by kind</div>' +
+      Object.keys(byKind).sort().map(function (kind) {
+        var style = c.kernel.EDGE_STYLE[kind] || { color: '#64748b' };
+        return '<div class="bar-row"><span>' + esc(kind) + '</span><span class="bar-wrap"><span class="bar" style="width:' + ((byKind[kind] / maxKind) * 100) + '%;background:' + style.color + '"></span></span><span>' + byKind[kind] + '</span></div>';
+      }).join('') + '</div>';
+    setStatus('graph v' + stats.version + ' updated ' + CloudOS.relTime(Date.parse(stats.updatedAt) || Date.now()));
+  }
+
+  function stat(key, value) {
+    return '<div class="stat-card"><div class="v">' + esc(value) + '</div><div class="k">' + esc(key) + '</div></div>';
+  }
+
+  function renderPerf() {
+    var host = document.getElementById('tm-main');
+    if (!document.getElementById('tm-perf')) {
+      host.innerHTML = '<div class="stat-grid" id="tm-perf-stats"></div>' +
+        '<canvas id="tm-perf"></canvas>' +
+        '<div class="spark-label" id="tm-perf-label" style="margin-top:6px"></div>' +
+        '<div class="panel" style="margin-top:10px"><div class="panel-title">kernel</div>' +
+        '<div class="spark-label">filesystem: ' + esc(c.fs.kind) + ' · boot: ' + esc(CloudOS.clockTime(c.state.bootedAt)) + ' · theme: ' + esc(c.theme().mode) + '</div>' +
+        '<div class="spark-label" id="tm-fs-line"></div></div>';
+      c.fs.estimate().then(function (estimate) {
+        var line = document.getElementById('tm-fs-line');
+        if (line) line.textContent = 'storage: ' + CloudOS.formatBytes(estimate.usage) + ' used of ' + CloudOS.formatBytes(estimate.quota) + ' available to this origin';
+      });
+    }
+    paintPerf();
+  }
+
+  function paintPerf() {
+    var canvas = document.getElementById('tm-perf');
+    if (!canvas || tab !== 'perf') return;
+    var rect = canvas.getBoundingClientRect();
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.floor(rect.width * dpr);
+    canvas.height = Math.floor(170 * dpr);
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var w = rect.width;
+    var h = 170;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(148,163,184,0.06)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(148,163,184,0.14)';
+    ctx.lineWidth = 1;
+    for (var gx = 0; gx <= 10; gx++) {
+      ctx.beginPath();
+      ctx.moveTo((w / 10) * gx, 0);
+      ctx.lineTo((w / 10) * gx, h);
+      ctx.stroke();
+    }
+    for (var gy = 0; gy <= 4; gy++) {
+      ctx.beginPath();
+      ctx.moveTo(0, (h / 4) * gy);
+      ctx.lineTo(w, (h / 4) * gy);
+      ctx.stroke();
+    }
+    if (samples.length < 2) {
+      ctx.fillStyle = 'rgba(148,163,184,0.6)';
+      ctx.font = '11px ui-monospace, monospace';
+      ctx.fillText('collecting kernel telemetry…', 12, h / 2);
+      return;
+    }
+    var maxEvents = Math.max.apply(null, samples.map(function (s) { return s.events; }).concat([2]));
+    var drawSeries = function (key, color, max) {
+      ctx.beginPath();
+      samples.forEach(function (sample, index) {
+        var x = (index / (samples.length - 1)) * (w - 8) + 4;
+        var y = h - 6 - (sample[key] / max) * (h - 18);
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+      ctx.lineTo(w - 4, h);
+      ctx.lineTo(4, h);
+      ctx.closePath();
+      ctx.fillStyle = color.replace('rgb', 'rgba').replace(')', ',0.12)');
+      ctx.fill();
+    };
+    var maxCommits = Math.max.apply(null, samples.map(function (s) { return s.commits; }).concat([1]));
+    drawSeries('events', 'rgb(56,189,248)', maxEvents);
+    drawSeries('commits', 'rgb(52,211,153)', maxCommits);
+    ctx.fillStyle = 'rgb(56,189,248)';
+    ctx.font = '10px ui-monospace, monospace';
+    ctx.fillText('bus events/sec  (peak ' + maxEvents + ')', 8, 12);
+    ctx.fillStyle = 'rgb(52,211,153)';
+    ctx.fillText('commits/sec  (peak ' + maxCommits + ')', 8, 24);
+
+    var last = samples[samples.length - 1];
+    var stats = c.kernel.bus.stats();
+    document.getElementById('tm-perf-stats').innerHTML =
+      stat('events/sec', last.events) + stat('commits/sec', last.commits) +
+      stat('total events', stats.emitted) + stat('graph version', graph().version) +
+      stat('listeners', stats.listenerCount) + stat('nodes', graph().stats().nodes);
+    var label = document.getElementById('tm-perf-label');
+    if (label) {
+      label.textContent = samples.length + ' samples · sample interval 1s · last ' + last.events + ' events, ' + last.commits + ' commits';
+    }
+  }
+
+  function sample() {
+    var emitted = c.kernel.bus.stats().emitted;
+    var version = graph().version;
+    var now = Date.now();
+    var seconds = Math.max(0.2, (now - lastAt) / 1000);
+    var events = lastEmitted == null ? 0 : Math.round((emitted - lastEmitted) / seconds);
+    var commits = lastVersion == null ? 0 : Math.round((version - lastVersion) / seconds);
+    lastEmitted = emitted;
+    lastVersion = version;
+    lastAt = now;
+    samples.push({ events: events, commits: commits, at: now });
+    if (samples.length > 90) samples.shift();
+    if (tab === 'perf') paintPerf();
+    document.getElementById('task-right').textContent = events + ' ev/s · ' + commits + ' tx/s · ' + graph().stats().nodes + ' nodes';
+  }
+
+  var lastVersion = null;
+
+  CloudOS.whenReady(function () {
+    CloudOS.connect('taskmanager').then(function (client) {
+      c = client;
+      CloudOS.bindTheme(c);
+      lastVersion = graph().version;
+      lastEmitted = c.kernel.bus.stats().emitted;
+
+      document.getElementById('tm-menu').appendChild(CloudOS.makeMenuBar({
+        View: [
+          { label: 'Processes', run: function () { tab = 'processes'; render(); } },
+          { label: 'Windows', run: function () { tab = 'windows'; render(); } },
+          { label: 'Graph', run: function () { tab = 'graph'; render(); } },
+          { label: 'Performance', run: function () { tab = 'perf'; render(); } },
+          { separator: true },
+          { label: 'Toggle dark / XP', run: function () { c.setTheme(c.theme().mode === 'xp' ? 'dark' : 'xp'); } },
+        ],
+        Actions: [
+          { label: 'Tile all windows', run: function () { c.kernel.bus.emit('Shell', 'tile-all', {}); } },
+          { label: 'Cascade all windows', run: function () { c.kernel.bus.emit('Shell', 'cascade-all', {}); } },
+          { label: 'Close all windows', run: function () { c.kernel.bus.emit('Shell', 'close-all', {}); } },
+          { separator: true },
+          { label: 'Open Graph Store', run: function () { c.launch('inspector'); } },
+          { label: 'Close', run: function () { c.close(); } },
+        ],
+      }).bar);
+
+      Array.prototype.forEach.call(document.querySelectorAll('#task-tabs-nav .tab'), function (el) {
+        el.addEventListener('click', function () {
+          tab = el.dataset.tab;
+          render();
+        });
+      });
+      document.getElementById('task-refresh').addEventListener('click', function () {
+        c.kernel.bus.emit('Shell', 'windows-request', {});
+        render();
+      });
+
+      c.on('Shell', 'windows', function (payload) {
+        windows = (payload && payload.windows) || [];
+        if (tab === 'windows') renderWindows();
+      });
+      c.onGraph(function () {
+        if (tab === 'processes' || tab === 'graph') render();
+      });
+
+      timer = setInterval(sample, 1000);
+      c.kernel.bus.emit('Shell', 'windows-request', {});
+      render();
+      c.setStatus('Task Manager watching kernel');
+    }).catch(function (error) {
+      document.body.innerHTML = '<div class="empty">Task Manager could not attach to the kernel.<br>' + esc(error.message) + '</div>';
+    });
+  });
+})();
+</script>
+</body>
+</html>

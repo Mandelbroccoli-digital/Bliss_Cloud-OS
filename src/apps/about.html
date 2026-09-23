@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--cloudos-head-->
+<meta charset="utf-8">
+<title>About CloudOS</title>
+<style>
+  #ab-main { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px; line-height: 1.6; user-select: text; }
+  #ab-main h1 { margin: 0 0 2px; font-size: 22px; font-weight: 300; letter-spacing: .18em; text-transform: uppercase; color: var(--text-strong); }
+  #ab-main h2 { margin: 18px 0 6px; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--text-dim); }
+  #ab-main p { margin: 0 0 8px; font-size: 12px; max-width: 700px; }
+  .ab-sub { color: var(--text-dim); font-size: 11px; font-family: var(--mono); }
+  .ab-stats { display: flex; flex-wrap: wrap; gap: 16px; margin: 10px 0 4px; }
+  .ab-stat { font-family: var(--mono); }
+  .ab-stat b { display: block; font-size: 17px; font-weight: 400; color: var(--accent); }
+  .ab-stat span { font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-dim); }
+  .ab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
+  .ab-item { display: flex; gap: 8px; align-items: baseline; font-size: 11px; background: var(--panel); border: 1px solid var(--border); border-radius: 5px; padding: 6px 9px; }
+  .ab-item b { font-family: var(--mono); font-weight: 600; }
+  .ab-item span { color: var(--text-dim); font-size: 10.5px; }
+  .ab-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; padding: 3px 0; }
+  .ab-row .grow { flex: 1; }
+  code { font-family: var(--mono); background: var(--panel-2); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; font-size: 11px; }
+</style>
+</head>
+<body class="os-app">
+  <div id="ab-menu"></div>
+  <div id="ab-main">
+    <h1>CloudOS</h1>
+    <div class="ab-sub" id="ab-version">v1 · nodegraph operating system · running in a perchance generator</div>
+    <div class="ab-stats" id="ab-stats"></div>
+
+    <h2>What this is</h2>
+    <p>
+      An operating system whose canonical state is a <b>typed property graph</b>. There is no separate
+      window list, no separate process table, no separate directory model: files, folders, applications,
+      processes, windows, services and agents are all nodes, and everything you see is a
+      <b>projection</b> of those nodes and edges.
+    </p>
+    <p>
+      Nothing mutates the graph in place. Every change is a labelled <b>transaction</b> — a batch of node
+      and edge upserts and deletes — which is validated atomically and produces a <i>new</i> graph. Because
+      the old graphs still exist, undo, redo, time travel, snapshots and cross-tab sync are consequences of
+      the design rather than features bolted on afterwards.
+    </p>
+    <p>
+      The filesystem is real: files live in the browser's Origin Private File System and are indexed into
+      the graph lazily as you expand directories. Applications run in isolated iframes and may only touch
+      the parts of the filesystem their capability policy allows.
+    </p>
+
+    <h2>Node types</h2>
+    <div class="ab-grid" id="ab-types"></div>
+
+    <h2>Edge kinds (how nodes relate)</h2>
+    <div class="ab-grid" id="ab-edges"></div>
+
+    <h2>Projections — every one of these reads the same graph</h2>
+    <div id="ab-apps"></div>
+
+    <h2>Keyboard</h2>
+    <div class="ab-grid">
+      <div class="ab-item"><b>Ctrl+Z</b><span>undo the last graph transaction (whole OS)</span></div>
+      <div class="ab-item"><b>Ctrl+Shift+Z</b><span>redo</span></div>
+      <div class="ab-item"><b>Ctrl+`</b><span>window switcher (↑↓ then Enter)</span></div>
+      <div class="ab-item"><b>F6</b><span>reload the shell</span></div>
+      <div class="ab-item"><b>drag title bar</b><span>move window; edges resize</span></div>
+      <div class="ab-item"><b>double-click icon</b><span>launch app</span></div>
+      <div class="ab-item"><b>wheel</b><span>zoom in Floret</span></div>
+      <div class="ab-item"><b>Ctrl+S</b><span>save in Notepad (real file write)</span></div>
+    </div>
+
+    <h2>Try this</h2>
+    <div id="ab-try"></div>
+  </div>
+  <div class="statusbar">
+    <span id="ab-status">ready</span>
+    <span id="ab-right"></span>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+  var c = null;
+
+  var NODE_DESC = {
+    app: 'a launchable definition',
+    window: 'a framed view owned by a process',
+    process: 'a running instance of an app',
+    file: 'a file in the mounted filesystem',
+    dir: 'a directory in the mounted filesystem',
+    agent: 'a capability-bearing actor you can add',
+    service: 'a kernel service',
+  };
+  var EDGE_DESC = {
+    contains: 'parent → child (shell contains windows, dirs contain files)',
+    launches: 'app → process',
+    owns: 'process → window',
+    opens: 'window → file it is displaying',
+    communicates: 'free-form link between any two nodes',
+    mounts: 'service → directory it exposes',
+    spawns: 'kernel → process it started',
+    reads: 'process → file it read',
+    writes: 'process → file it wrote',
+  };
+
+  function esc(v) { return CloudOS.escapeHtml(v); }
+
+  function render() {
+    var store = c.graph();
+    var stats = store.stats();
+    document.getElementById('ab-version').textContent = 'v1 · nodegraph operating system · graph v' + stats.version + ' · fs ' + c.fs.kind + (c.standalone ? ' · standalone' : '');
+    document.getElementById('ab-stats').innerHTML = [
+      ['nodes', stats.nodes], ['edges', stats.edges], ['types', Object.keys(stats.byType).length],
+      ['transactions', c.kernel.graph.history.length], ['bus events', c.kernel.bus.stats().emitted],
+      ['windows', store.query({ type: 'window' }).length],
+    ].map(function (pair) {
+      return '<div class="ab-stat"><b>' + esc(pair[1]) + '</b><span>' + esc(pair[0]) + '</span></div>';
+    }).join('');
+
+    document.getElementById('ab-types').innerHTML = Object.keys(c.kernel.NODE_STYLE).filter(function (t) { return t !== 'unknown'; }).map(function (type) {
+      var style = c.kernel.NODE_STYLE[type];
+      return '<div class="ab-item"><span style="color:' + style.color + '">' + style.icon + '</span><b>' + esc(type) + '</b><span>' + esc(NODE_DESC[type] || '') + '</span></div>';
+    }).join('');
+
+    document.getElementById('ab-edges').innerHTML = Object.keys(c.kernel.EDGE_STYLE).map(function (kind) {
+      var style = c.kernel.EDGE_STYLE[kind];
+      return '<div class="ab-item"><span style="color:' + style.color + '">━▶</span><b>' + esc(kind) + '</b><span>' + esc(EDGE_DESC[kind] || '') + '</span></div>';
+    }).join('');
+
+    document.getElementById('ab-apps').innerHTML = c.kernel.DESKTOP_ORDER.map(function (id) {
+      var meta = c.kernel.APPS[id];
+      return '<div class="ab-row"><span>' + (meta.icon || '📦') + '</span><span class="grow"><b>' + esc(meta.title) + '</b> — <span class="dim">' + esc(meta.blurb || '') + '</span></span><button class="tool" data-launch="' + esc(id) + '">Open</button></div>';
+    }).join('');
+
+    document.getElementById('ab-try').innerHTML = [
+      ['Open Floret and expand a directory', 'each expansion runs scan → fs → graph:commit'],
+      ['Drag a node and press Ctrl+Z', 'layout is graph data, so it undoes'],
+      ['Open Graph Store → Transactions', 'click any commit to time travel the whole OS'],
+      ['Terminal: <code>edges owns</code>', 'see which processes own which windows right now'],
+      ['Terminal: <code>nodes agent</code>', 'press the ＋ Node button in Floret first'],
+      ['Control Panel → Graph → Export JSON', 'the entire state of the machine, one file'],
+    ].map(function (pair) {
+      return '<div class="ab-row"><span>▸</span><span class="grow">' + pair[0] + ' <span class="dim">— ' + pair[1] + '</span></span></div>';
+    }).join('') +
+      '<div class="ab-row" style="margin-top:8px"><button class="tool" id="ab-manifesto">Read the manifesto</button>' +
+      '<button class="tool" id="ab-welcome">Read welcome.md</button>' +
+      '<button class="tool" id="ab-floret">Open Floret</button>' +
+      '<button class="tool" id="ab-graph">Open Graph Store</button></div>';
+
+    Array.prototype.forEach.call(document.querySelectorAll('[data-launch]'), function (button) {
+      button.addEventListener('click', function () { c.launch(button.dataset.launch); });
+    });
+    document.getElementById('ab-manifesto').addEventListener('click', function () { c.launch('notepad', { file: '/home/Documents/cloud-os-manifesto.md' }); });
+    document.getElementById('ab-welcome').addEventListener('click', function () { c.launch('notepad', { file: '/home/Desktop/welcome.md' }); });
+    document.getElementById('ab-floret').addEventListener('click', function () { c.launch('floret'); });
+    document.getElementById('ab-graph').addEventListener('click', function () { c.launch('inspector'); });
+
+    document.getElementById('ab-right').textContent = 'graph v' + stats.version + ' · ' + stats.nodes + ' nodes · ' + stats.edges + ' edges';
+  }
+
+  CloudOS.whenReady(function () {
+    CloudOS.connect('about').then(function (client) {
+      c = client;
+      CloudOS.bindTheme(c);
+
+      document.getElementById('ab-menu').appendChild(CloudOS.makeMenuBar({
+        File: [
+          { label: 'Read the manifesto', run: function () { c.launch('notepad', { file: '/home/Documents/cloud-os-manifesto.md' }); } },
+          { label: 'Read the graph model', run: function () { c.launch('notepad', { file: '/home/Documents/graph-model.md' }); } },
+          { separator: true },
+          { label: 'Close', run: function () { c.close(); } },
+        ],
+        View: [
+          { label: 'Toggle dark / XP', run: function () { c.setTheme(c.theme().mode === 'xp' ? 'dark' : 'xp'); } },
+          { label: 'Open Floret', run: function () { c.launch('floret'); } },
+          { label: 'Open Graph Store', run: function () { c.launch('inspector'); } },
+        ],
+      }).bar);
+
+      c.onGraph(render);
+      render();
+      c.setStatus('CloudOS — one graph, many projections');
+    }).catch(function (error) {
+      document.body.innerHTML = '<div class="empty">About could not attach to the kernel.<br>' + esc(error.message) + '</div>';
+    });
+  });
+})();
+</script>
+</body>
+</html>
