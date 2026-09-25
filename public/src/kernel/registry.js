@@ -44,6 +44,17 @@ export const APPS = {
     capabilities: { fs: ['read', 'write'], ai: ['gemini-3.8-flash'] },
     blurb: 'Subkernel intelligence & autopoietic AI agent (Gemini 3.8).',
   },
+  chorus: {
+    title: 'Chorus AGI',
+    icon: '🥦',
+    uri: 'src/apps/chorus.html',
+    size: [1040, 680],
+    kind: 'agent',
+    pinned: true,
+    capabilities: { fs: ['read', 'write'], ai: ['gemini-3.8-flash'] },
+    fileTypes: ['cdsl', 'sml', 'ast'],
+    blurb: 'Autopoietic AGI bootstrap engine, Google Drive sync & fitment tester.',
+  },
   explorer: {
     title: 'Explorer',
     icon: '📂',
@@ -132,7 +143,7 @@ export const APPS = {
   },
 };
 
-export const DESKTOP_ORDER = ['floret', 'logos', 'explorer', 'notepad', 'terminal', 'inspector', 'taskmanager', 'player', 'viewer', 'controlpanel', 'about'];
+export const DESKTOP_ORDER = ['floret', 'logos', 'chorus', 'explorer', 'notepad', 'terminal', 'inspector', 'taskmanager', 'player', 'viewer', 'controlpanel', 'about'];
 
 export const THEME = {
   dark: {

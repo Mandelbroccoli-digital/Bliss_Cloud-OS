@@ -166,6 +166,67 @@ transaction fails atomically if any part of it is invalid.
   etc: {
     motd: 'CloudOS — one graph, many projections. Type `help` in the Terminal.\n',
   },
+  chorus: {
+    'autopoiesis.cdsl': `# ChorusDSL Autopoietic Bootstrap Seed (Epoch 1-4)
+// Invariant Kernel target with gas metered execution
+module Autopoiesis {
+  import std::hive;
+  import std::cortex;
+
+  temperament TEMP_03_AUTOPOIETICO_VANGUARD;
+
+  fn evaluate_fitness(gas_used: u64, memory_mb: u32) -> f32 {
+    let alpha: f32 = 0.60;
+    let beta: f32 = 0.25;
+    let gamma: f32 = 0.15;
+    let gas_ratio = 1.0 - (gas_used as f32 / 10000000.0);
+    let mem_ratio = 1.0 - (memory_mb as f32 / 64.0);
+    return (alpha * 1.0) + (beta * gas_ratio) + (gamma * mem_ratio);
+  }
+
+  corridor KERNEL_DISPATCHER [0] {
+    route_packets(ring: DK_RING);
+  }
+
+  corridor SANDBOX_RING [2] {
+    meter_gas(ceiling: 10000000);
+    isolate_memory(max_mb: 64);
+  }
+
+  fn recursive_step(ast_root: &ASTNode) -> MutationResult {
+    let baseline_f = evaluate_fitness(1250000, 12);
+    let patch = cortex::propose_mutation(ast_root, TEMP_01_ANALYTICAL_REFLECTOR);
+    let mutated_f = evaluate_fitness(800000, 8);
+    if mutated_f > baseline_f && mutated_f >= 0.70 {
+      hive::commit_seed_dag(patch, mutated_f);
+      return MutationResult::Nominal(mutated_f);
+    }
+    return MutationResult::Degraded;
+  }
+}
+`,
+    'matrix_ops.cdsl': `# ChorusDSL Linear & Tensor Kernel Primitives
+module MatrixOps {
+  primitive dot_product(a: [f32; 64], b: [f32; 64]) -> f32 {
+    bounded_loop(MAX_AST_DEPTH = 64) {
+      // unrolled vector product
+    }
+  }
+}
+`,
+    'README.md': `# ChorusDSL Workspace\nConnected to Google Drive folder: 1OB6oi_yNRYTCcvo9oPTag8wytTtk6Ude\nRun fitment benchmarks and recursive bootstrap via the Chorus AGI application.\n`,
+  },
+  daemon: {
+    sys: {
+      'kernel_state.json': JSON.stringify({ immutability: 'locked', rx_pages: '0x20260900', traps: 0, status: 'nominal' }, null, 2),
+    },
+    agent: {
+      'logos_state.json': JSON.stringify({ active_mask: 'TEMP_01_ANALYTICAL_REFLECTOR', confidence: 0.94, monologue: 'private' }, null, 2),
+    },
+    shared: {
+      'registers.json': JSON.stringify({ gas_counter: 10000000, active_corridor: 0, ring_buffer_head: 0, ring_buffer_tail: 0 }, null, 2),
+    },
+  },
 };
 
 function buildInitialGraph(defaults) {

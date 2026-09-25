@@ -684,6 +684,60 @@ export function createShell(kernel) {
     );
   }
 
+  const ICON_STORAGE_KEY = 'cloudos.desktop.icons.v1';
+
+  const ICON_SIZE_MAP = {
+    small: { size: '24px', containerW: '75px', containerH: '85px', fontSize: '10px' },
+    medium: { size: '32px', containerW: '95px', containerH: '105px', fontSize: '11px' },
+    large: { size: '48px', containerW: '115px', containerH: '125px', fontSize: '12px' },
+  };
+
+  function readIconSettings() {
+    try {
+      const raw = localStorage.getItem(ICON_STORAGE_KEY);
+      if (!raw) return { size: 'medium', showIcons: true };
+      const parsed = JSON.parse(raw);
+      return {
+        size: (parsed && parsed.size in ICON_SIZE_MAP) ? parsed.size : 'medium',
+        showIcons: parsed && parsed.showIcons !== false,
+      };
+    } catch {
+      return { size: 'medium', showIcons: true };
+    }
+  }
+
+  let iconSettings = readIconSettings();
+
+  function applyIconSettings() {
+    const config = ICON_SIZE_MAP[iconSettings.size] || ICON_SIZE_MAP.medium;
+    if (dom.icons) {
+      dom.icons.style.display = iconSettings.showIcons ? 'grid' : 'none';
+      dom.icons.style.setProperty('--icon-size', config.size);
+      dom.icons.style.setProperty('--icon-container-width', config.containerW);
+      dom.icons.style.setProperty('--icon-container-height', config.containerH);
+      dom.icons.style.setProperty('--icon-font-size', config.fontSize);
+    }
+    try {
+      localStorage.setItem(ICON_STORAGE_KEY, JSON.stringify(iconSettings));
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function setIconSize(size) {
+    if (size in ICON_SIZE_MAP) {
+      iconSettings.size = size;
+      applyIconSettings();
+      setStatus('Desktop icons: ' + size);
+    }
+  }
+
+  function toggleShowIcons() {
+    iconSettings.showIcons = !iconSettings.showIcons;
+    applyIconSettings();
+    setStatus(iconSettings.showIcons ? 'Desktop icons visible' : 'Desktop icons hidden');
+  }
+
   function showContextMenu(x, y, items) {
     dom.ctx.innerHTML = '';
     items.forEach((item) => {
@@ -693,8 +747,15 @@ export function createShell(kernel) {
         dom.ctx.appendChild(sep);
         return;
       }
+      if (item.header) {
+        const hdr = document.createElement('div');
+        hdr.className = 'ctx-header';
+        hdr.textContent = item.label;
+        dom.ctx.appendChild(hdr);
+        return;
+      }
       const row = document.createElement('div');
-      row.className = 'ctx-item' + (item.disabled ? ' disabled' : '');
+      row.className = 'ctx-item' + (item.active ? ' active' : '') + (item.disabled ? ' disabled' : '');
       const label = document.createElement('span');
       label.textContent = (item.icon ? item.icon + '  ' : '') + item.label;
       row.appendChild(label);
@@ -706,12 +767,12 @@ export function createShell(kernel) {
       }
       row.addEventListener('click', () => {
         hideContextMenu();
-        item.run();
+        if (typeof item.run === 'function') item.run();
       });
       dom.ctx.appendChild(row);
     });
     dom.ctx.classList.add('open');
-    const width = 220;
+    const width = 230;
     const height = dom.ctx.offsetHeight + 8;
     dom.ctx.style.left = Math.min(x, window.innerWidth - width - 6) + 'px';
     dom.ctx.style.top = Math.min(y, window.innerHeight - height - 6) + 'px';
@@ -737,11 +798,44 @@ export function createShell(kernel) {
   }
 
   function showDesktopMenu(x, y) {
-    const items = DESKTOP_ORDER.slice(0, 6).map((id) => ({
-      label: 'Open ' + appMeta(id).title,
-      icon: appMeta(id).icon,
-      run: () => openApp(id),
-    }));
+    const items = [
+      { header: true, label: 'View Options' },
+      {
+        label: iconSettings.showIcons ? 'Hide Desktop Icons' : 'Show Desktop Icons',
+        icon: iconSettings.showIcons ? '👁️' : '👁️‍🗨️',
+        run: toggleShowIcons,
+      },
+      { separator: true },
+      { header: true, label: 'Icon Size' },
+      {
+        label: (iconSettings.size === 'small' ? '● ' : '○ ') + 'Small Icons',
+        icon: '▫️',
+        active: iconSettings.size === 'small',
+        run: () => setIconSize('small'),
+      },
+      {
+        label: (iconSettings.size === 'medium' ? '● ' : '○ ') + 'Medium Icons',
+        icon: '🔎',
+        active: iconSettings.size === 'medium',
+        run: () => setIconSize('medium'),
+      },
+      {
+        label: (iconSettings.size === 'large' ? '● ' : '○ ') + 'Large Icons',
+        icon: '🔍',
+        active: iconSettings.size === 'large',
+        run: () => setIconSize('large'),
+      },
+      { separator: true },
+    ];
+
+    DESKTOP_ORDER.slice(0, 6).forEach((id) => {
+      items.push({
+        label: 'Open ' + appMeta(id).title,
+        icon: appMeta(id).icon,
+        run: () => openApp(id),
+      });
+    });
+
     items.push(
       { separator: true },
       { label: 'Next wallpaper', icon: '🎨', run: () => cycleWallpaper(1) },
@@ -1045,6 +1139,7 @@ export function createShell(kernel) {
     cleanupOrphanProcesses();
     veil('projecting graph…', 0.55);
     applyTheme();
+    applyIconSettings();
     renderIcons();
     renderStartMenu();
     wireBus();

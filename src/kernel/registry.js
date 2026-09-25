@@ -44,6 +44,17 @@ export const APPS = {
     capabilities: { fs: ['read', 'write'], ai: ['gemini-3.8-flash'] },
     blurb: 'Subkernel intelligence & autopoietic AI agent (Gemini 3.8).',
   },
+  chorus: {
+    title: 'Chorus AGI',
+    icon: '🥦',
+    uri: 'src/apps/chorus.html',
+    size: [1040, 680],
+    kind: 'agent',
+    pinned: true,
+    capabilities: { fs: ['read', 'write'], ai: ['gemini-3.8-flash'] },
+    fileTypes: ['cdsl', 'sml', 'ast'],
+    blurb: 'Autopoietic AGI bootstrap engine, Google Drive sync & fitment tester.',
+  },
   explorer: {
     title: 'Explorer',
     icon: '📂',
@@ -101,15 +112,15 @@ export const APPS = {
     blurb: 'Theme, wallpaper, storage and graph snapshots.',
   },
   player: {
-    title: 'Media Player',
+    title: 'Chorus Player',
     icon: '🎵',
     uri: 'src/apps/player.html',
-    size: [780, 600],
+    size: [860, 620],
     kind: 'app',
     pinned: true,
     capabilities: { fs: ['read'] },
     fileTypes: ['mp3', 'flac', 'wav', 'ogg', 'm4a', 'aac', 'opus'],
-    blurb: 'Web Audio playback, EQ and a library indexed into the graph.',
+    blurb: 'Chorus Music Player Engine — Milkdrop visualizer, ID3 tagging & studio EQ.',
   },
   viewer: {
     title: 'Viewer',
@@ -132,7 +143,7 @@ export const APPS = {
   },
 };
 
-export const DESKTOP_ORDER = ['floret', 'logos', 'explorer', 'notepad', 'terminal', 'inspector', 'taskmanager', 'player', 'viewer', 'controlpanel', 'about'];
+export const DESKTOP_ORDER = ['floret', 'logos', 'chorus', 'explorer', 'notepad', 'terminal', 'inspector', 'taskmanager', 'player', 'viewer', 'controlpanel', 'about'];
 
 export const THEME = {
   dark: {

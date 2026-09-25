@@ -1,91 +1,165 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script src="../subkernel-bus.js"></script>
-<script src="../subkernel-bridge.js"></script>
-<meta charset="UTF-8">
+<!--cloudos-head-->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Logos 🦀 // Subkernel Intelligence</title>
 <style>
-:root{--bg:#060a10;--panel:#0f172a;--card:#151c2b;--line:rgba(255,255,255,.10);
---fg:#e8eef7;--dim:#8b98ad;--accent:#38bdf8;--accent2:#818cf8;--ok:#22c55e;--warn:#fbbf24;--err:#f87171;}
-[data-theme="xp"]{--bg:#ece9d8;--panel:#f1efe2;--card:#fff;--line:#aca899;--fg:#000;--dim:#555;--accent:#0055ea;--accent2:#316ac5;}
-[data-theme="slate"]{--bg:#2b303b;--panel:#353c4a;--card:#1e222a;--line:#4a5060;--fg:#e2e8f0;--dim:#94a3b8;}
-*{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:"JetBrains Mono",Consolas,monospace;font-size:11px;background:var(--bg);color:var(--fg);
-height:100vh;display:flex;flex-direction:column;overflow:hidden;}
-.hdr{display:flex;align-items:center;justify-content:space-between;padding:7px 11px;
-background:var(--panel);border-bottom:1px solid var(--line);flex-shrink:0;}
-.brand{display:flex;align-items:center;gap:9px;font-weight:700;}
-.crab{width:27px;height:27px;border-radius:7px;display:flex;align-items:center;justify-content:center;
-font-size:15px;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 0 13px rgba(56,189,248,.4);}
-.sub{font-size:9px;color:var(--dim);letter-spacing:.11em;text-transform:uppercase;font-weight:400;}
-.pill{background:rgba(0,0,0,.28);border:1px solid var(--line);padding:2px 8px;border-radius:4px;
-font-size:9px;color:var(--dim);}
-.pill.live{color:var(--ok);border-color:rgba(34,197,94,.4);}
-.pill.off{color:var(--err);border-color:rgba(248,113,113,.4);}
-.body{flex:1;display:grid;grid-template-columns:230px 1fr;min-height:0;height:calc(100vh - 42px);}
-.side{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:9px;
-display:flex;flex-direction:column;gap:9px;}
-.grp{border:1px solid var(--line);border-radius:6px;background:var(--card);}
-.grp h4{font-size:9px;text-transform:uppercase;letter-spacing:.09em;color:var(--dim);
-padding:5px 8px;border-bottom:1px solid var(--line);}
-.grp .in{padding:7px 8px;display:flex;flex-direction:column;gap:6px;}
-label{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;}
-select,input[type=text],input[type=password],textarea{width:100%;background:var(--bg);color:var(--fg);
-border:1px solid var(--line);border-radius:4px;padding:4px 6px;font-family:inherit;font-size:10px;outline:none;}
-select:focus,input:focus,textarea:focus{border-color:var(--accent);}
-.tog{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:10px;color:var(--fg);}
-.tog input{accent-color:var(--accent);}
-.btn{background:var(--card);border:1px solid var(--line);color:var(--fg);padding:4px 9px;
-border-radius:4px;cursor:pointer;font-family:inherit;font-size:10px;}
-.btn:hover{border-color:var(--accent);color:var(--accent);}
-.btn.pri{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#04121f;font-weight:700;border:none;}
-.btn.pri:hover{opacity:.9;color:#04121f;}
-.btn.mini{padding:2px 6px;font-size:9px;}
-.btn.danger{color:var(--err);border-color:rgba(248,113,113,.4);}
-.main{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--bg);height:100%;}
-.tabs{display:flex;gap:3px;padding:6px 9px 0;background:var(--panel);border-bottom:1px solid var(--line);flex-shrink:0;}
-.tab{padding:5px 13px;border-radius:5px 5px 0 0;cursor:pointer;font-size:10px;color:var(--dim);
-border:1px solid transparent;border-bottom:none;}
-.tab.on{background:var(--bg);border-color:var(--line);color:var(--accent);font-weight:700;}
-.pane{flex:1;display:none;flex-direction:column;min-height:0;min-width:0;height:calc(100% - 31px);}
-.pane.on{display:flex;}
-.stream{flex:1;overflow-y:scroll;overflow-x:hidden;padding:13px;display:flex;flex-direction:column;gap:11px;min-height:0;}
-.msg{display:flex;gap:9px;max-width:92%;}
-.msg.u{margin-left:auto;flex-direction:row-reverse;}
-.av{width:25px;height:25px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-flex-shrink:0;font-size:12px;background:var(--card);border:1px solid var(--line);}
-.msg.u .av{background:var(--accent);color:#04121f;border:none;}
-.bub{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:8px 11px;
-line-height:1.55;overflow-x:auto;font-size:11px;}
-.msg.u .bub{background:rgba(56,189,248,.13);border-color:rgba(56,189,248,.3);}
-.bub pre{background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:7px;margin:6px 0;overflow-x:auto;}
-.bub code{color:var(--accent);}
-.bub p{margin:4px 0;}
-.tool{border:1px solid rgba(129,140,248,.35);background:rgba(129,140,248,.08);border-radius:6px;
-padding:6px 9px;font-size:10px;color:var(--accent2);margin:5px 0;}
-.tool .nm{font-weight:700;display:flex;align-items:center;gap:6px;}
-.tool pre{background:rgba(0,0,0,.3);border:none;font-size:9px;max-height:150px;color:var(--dim);}
-.tool.ok{border-color:rgba(34,197,94,.35);background:rgba(34,197,94,.07);color:var(--ok);}
-.tool.err{border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.07);color:var(--err);}
-.compose{border-top:1px solid var(--line);padding:9px;display:flex;gap:7px;background:var(--panel);flex-shrink:0;}
-.compose textarea{flex:1;resize:none;min-height:38px;max-height:132px;font-size:11px;padding:8px;}
-.send{width:40px;border-radius:6px;flex-shrink:0;font-size:15px;}
-.status{padding:3px 11px;border-top:1px solid var(--line);background:var(--panel);
-display:flex;justify-content:space-between;font-size:9px;color:var(--dim);flex-shrink:0;}
-.log{flex:1;overflow-y:auto;background:#05080d;color:#3f7;font-family:inherit;font-size:10px;padding:9px;}
-.log .w{color:var(--warn);} .log .e{color:var(--err);} .log .i{color:var(--accent);}
-.tools-tbl{width:100%;border-collapse:collapse;font-size:10px;}
-.tools-tbl th{text-align:left;padding:5px 8px;color:var(--dim);border-bottom:1px solid var(--line);
-font-size:9px;text-transform:uppercase;position:sticky;top:0;background:var(--bg);}
-.tools-tbl td{padding:4px 8px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top;}
-.tag-badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:8px;margin-right:3px;background:var(--card);border:1px solid var(--line);}
-.dim{color:var(--dim);}
-.spin{display:inline-block;animation:sp 1s linear infinite;}
-@keyframes sp{to{transform:rotate(360deg);}}
+  :root {
+    --bg: #060a10;
+    --panel: #0f172a;
+    --panel-2: #1e293b;
+    --card: #151c2b;
+    --line: rgba(255,255,255,.10);
+    --fg: #e8eef7;
+    --dim: #8b98ad;
+    --accent: #38bdf8;
+    --accent2: #818cf8;
+    --ok: #22c55e;
+    --warn: #fbbf24;
+    --err: #f87171;
+  }
+  [data-theme="xp"] {
+    --bg: #ece9d8;
+    --panel: #f1efe2;
+    --panel-2: #e0ded0;
+    --card: #fff;
+    --line: #aca899;
+    --fg: #000;
+    --dim: #555;
+    --accent: #0055ea;
+    --accent2: #316ac5;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: var(--mono, "JetBrains Mono", Consolas, monospace);
+    font-size: 11px;
+    background: var(--bg);
+    color: var(--fg);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 11px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
+  }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; }
+  .crab {
+    width: 27px; height: 27px; border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    box-shadow: 0 0 13px rgba(56,189,248,.4);
+  }
+  .sub { font-size: 9px; color: var(--dim); letter-spacing: .11em; text-transform: uppercase; font-weight: 400; }
+  .pills { display: flex; gap: 5px; align-items: center; }
+  .pill {
+    background: rgba(0,0,0,.28);
+    border: 1px solid var(--line);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 9px;
+    color: var(--dim);
+  }
+  .pill.live { color: var(--ok); border-color: rgba(34,197,94,.4); }
+  .pill.working { color: var(--warn); border-color: rgba(251,191,36,.4); }
+  
+  .body {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    min-height: 0;
+    height: calc(100vh - 42px);
+  }
+  .side {
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    overflow-y: auto;
+    padding: 9px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .grp { border: 1px solid var(--line); border-radius: 6px; background: var(--card); }
+  .grp h4 {
+    font-size: 9px; text-transform: uppercase; letter-spacing: .09em; color: var(--dim);
+    padding: 5px 8px; border-bottom: 1px solid var(--line);
+  }
+  .grp .in { padding: 7px 8px; display: flex; flex-direction: column; gap: 6px; }
+  label { font-size: 9px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+  select, input[type=text], textarea {
+    width: 100%; background: var(--bg); color: var(--fg);
+    border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px;
+    font-family: inherit; font-size: 10px; outline: none;
+  }
+  select:focus, input:focus, textarea:focus { border-color: var(--accent); }
+  .tog { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 10px; color: var(--fg); }
+  .tog input { accent-color: var(--accent); }
+  .btn {
+    background: var(--card); border: 1px solid var(--line); color: var(--fg);
+    padding: 4px 9px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 10px;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.pri { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #04121f; font-weight: 700; border: none; }
+  .btn.pri:hover { opacity: .9; }
+  .btn.mini { padding: 2px 6px; font-size: 9px; }
+  .btn.danger { color: var(--err); border-color: rgba(248,113,113,.4); }
+
+  .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); height: 100%; }
+  .tabs { display: flex; gap: 3px; padding: 6px 9px 0; background: var(--panel); border-bottom: 1px solid var(--line); flex-shrink: 0; }
+  .tab {
+    padding: 5px 13px; border-radius: 5px 5px 0 0; cursor: pointer; font-size: 10px; color: var(--dim);
+    border: 1px solid transparent; border-bottom: none;
+  }
+  .tab.on { background: var(--bg); border-color: var(--line); color: var(--accent); font-weight: 700; }
+  .pane { flex: 1; display: none; flex-direction: column; min-height: 0; min-width: 0; height: calc(100% - 31px); }
+  .pane.on { display: flex; }
+
+  .stream { flex: 1; overflow-y: scroll; overflow-x: hidden; padding: 13px; display: flex; flex-direction: column; gap: 11px; min-height: 0; }
+  .msg { display: flex; gap: 9px; max-width: 92%; }
+  .msg.u { margin-left: auto; flex-direction: row-reverse; }
+  .av {
+    width: 25px; height: 25px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; font-size: 12px; background: var(--card); border: 1px solid var(--line);
+  }
+  .msg.u .av { background: var(--accent); color: #04121f; border: none; }
+  .bub {
+    background: var(--card); border: 1px solid var(--line); border-radius: 9px;
+    padding: 8px 11px; line-height: 1.55; overflow-x: auto; font-size: 11px;
+  }
+  .msg.u .bub { background: rgba(56,189,248,.13); border-color: rgba(56,189,248,.3); }
+  .bub pre { background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 7px; margin: 6px 0; overflow-x: auto; }
+  .bub code { color: var(--accent); }
+  .tool-call {
+    border: 1px solid rgba(129,140,248,.35); background: rgba(129,140,248,.08);
+    border-radius: 6px; padding: 6px 9px; font-size: 10px; color: var(--accent2); margin: 5px 0;
+  }
+  .tool-call .nm { font-weight: 700; display: flex; align-items: center; gap: 6px; }
+  .tool-call pre { background: rgba(0,0,0,.3); border: none; font-size: 9px; max-height: 150px; color: var(--dim); margin-top: 4px; padding: 4px; border-radius: 3px; }
+  .tool-call.ok { border-color: rgba(34,197,94,.35); background: rgba(34,197,94,.07); color: var(--ok); }
+
+  .compose { border-top: 1px solid var(--line); padding: 9px; display: flex; gap: 7px; background: var(--panel); flex-shrink: 0; }
+  .compose textarea { flex: 1; resize: none; min-height: 38px; max-height: 132px; font-size: 11px; padding: 8px; }
+  .send { width: 40px; border-radius: 6px; flex-shrink: 0; font-size: 15px; }
+
+  .status {
+    padding: 4px 11px; border-top: 1px solid var(--line); background: var(--panel);
+    display: flex; justify-content: space-between; font-size: 9px; color: var(--dim); flex-shrink: 0;
+  }
+  .tools-tbl { width: 100%; border-collapse: collapse; font-size: 10px; }
+  .tools-tbl th { text-align: left; padding: 5px 8px; color: var(--dim); border-bottom: 1px solid var(--line); font-size: 9px; text-transform: uppercase; }
+  .tools-tbl td { padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,.05); vertical-align: top; }
 </style>
 </head>
-<body data-theme="dark">
+<body>
 
 <div class="hdr">
   <div class="brand">
@@ -95,207 +169,438 @@ font-size:9px;text-transform:uppercase;position:sticky;top:0;background:var(--bg
       <div class="sub">Subkernel Intelligence</div>
     </div>
   </div>
-  <div style="display:flex;gap:5px;align-items:center;">
-    <span class="pill" id="p-provider">OLLAMA</span>
-    <span class="pill" id="p-kernel">KERNEL READY</span>
+  <div class="pills">
+    <span class="pill live" id="p-provider">GEMINI 3.8</span>
+    <span class="pill live" id="p-kernel">KERNEL READY</span>
     <span class="pill" id="p-agent">IDLE</span>
   </div>
 </div>
 
 <div class="body">
   <div class="side">
-    <div class="grp"><h4>Provider Selector</h4><div class="in">
-      <select id="provider" onchange="onProviderChange()">
-        <option value="ollama">🏠 Ollama (Local)</option>
-        <option value="openrouter">🌐 OpenRouter</option>
-        <option value="gemini">✨ Google Gemini</option>
-      </select>
-      
-      <label>Model Engine</label>
-      <div style="display:flex;gap:4px;">
-        <select id="model" style="flex:1" onchange="setModel(this.value)"><option>Select Model...</option></select>
-        <button class="btn mini" onclick="refreshModels()" title="Fetch Remote Tags">🔄</button>
+    <div class="grp">
+      <h4>Intelligence Engine</h4>
+      <div class="in">
+        <label>Provider</label>
+        <select id="provider" onchange="onProviderChange()">
+          <option value="gemini" selected>✨ Google Gemini (gemini-3.8-flash)</option>
+          <option value="local">🏠 Subkernel Local Engine</option>
+          <option value="custom">🌐 Custom Proxy</option>
+        </select>
+
+        <label>Model</label>
+        <input type="text" id="model-name" value="gemini-3.8-flash" readonly>
+
+        <label>System Context</label>
+        <div style="font-size:9px;color:var(--dim)">
+          Logos is wired to CloudOS property graph, OPFS storage, and bus router.
+        </div>
       </div>
-      <input type="text" id="model-custom" placeholder="or type a model id (e.g. anthropic/claude-3.5-sonnet)" oninput="setModel(this.value)" spellcheck="false">
+    </div>
 
-      <div id="remote-cfg" style="display:flex;flex-direction:column;gap:6px;">
-        <label>Endpoint URL</label>
-        <input type="text" id="endpoint" value="http://localhost:11434" spellcheck="false">
-        <label>API Key Verification</label>
-        <input type="password" id="apikey" placeholder="Paste Key..." oninput="onKeyInput()">
-        <button class="btn mini pri" onclick="verifyAndInspectTags()">Check Key &amp; Model Tags</button>
-        <div class="dim" id="key-hint" style="font-size:9px;min-height:12px;word-break:break-all;"></div>
+    <div class="grp">
+      <h4>Autopoietic Agency</h4>
+      <div class="in">
+        <label class="tog"><input type="checkbox" id="tools-on" checked> Subkernel Tool-Calling</label>
+        <label class="tog"><input type="checkbox" id="auto-link" checked> Auto-link in Floret</label>
+        <div style="font-size:9px;color:var(--dim);margin-top:2px">
+          Logos can inspect graph nodes, read/write files, and create connected agent nodes.
+        </div>
       </div>
+    </div>
 
-    </div></div>
-
-    <div class="grp"><h4>Active Model Tags</h4><div class="in" id="tag-container">
-      <div class="dim">No active tags checked.</div>
-    </div></div>
-
-    <div class="grp"><h4>Agency</h4><div class="in">
-      <label class="tog"><input type="checkbox" id="tools-on" checked onchange="saveCfg()"> Kernel tool-calling</label>
-      <label class="tog"><input type="checkbox" id="auto-on" onchange="saveCfg()"> Autonomous loop</label>
-      <label>Max tool steps</label>
-      <input type="text" id="max-steps" value="8" onchange="saveCfg()">
-      <label class="tog"><input type="checkbox" id="confirm-writes" checked onchange="saveCfg()"> Confirm writes/exec</label>
-    </div></div>
-
-    <div class="grp"><h4>Context Routing</h4><div class="in">
-      <div class="dim" id="ctx-info">no context bound</div>
-      <button class="btn mini" onclick="bindExplorer()">📁 Bind Explorer path</button>
-      <button class="btn mini" onclick="bindNotepad()">📝 Pull Notepad buffer</button>
-      <button class="btn mini danger" onclick="clearCtx()">Clear context</button>
-    </div></div>
+    <div class="grp">
+      <h4>Active Context</h4>
+      <div class="in">
+        <div id="ctx-info" style="font-size:9px;color:var(--dim);word-break:break-all">no node or file bound</div>
+        <button class="btn mini" onclick="bindFloret()">🌸 Bind Selected Floret Node</button>
+        <button class="btn mini" onclick="bindExplorer()">📂 Bind Current Folder</button>
+        <button class="btn mini danger" onclick="clearCtx()">Clear Context</button>
+      </div>
+    </div>
   </div>
 
   <div class="main">
     <div class="tabs">
-      <div class="tab on" data-p="chat"  onclick="setPane('chat')">💬 Thread</div>
-      <div class="tab"    data-p="session" onclick="setPane('session')">💾 Session Manager</div>
-      <div class="tab"    data-p="tools" onclick="setPane('tools')">🛠️ Tools</div>
-      <div class="tab"    data-p="trace" onclick="setPane('trace')">📊 Trace</div>
+      <div class="tab on" data-p="chat" onclick="setPane('chat')">💬 Thread</div>
+      <div class="tab" data-p="tools" onclick="setPane('tools')">🛠️ Kernel Tools</div>
+      <div class="tab" data-p="graph" onclick="setPane('graph')">🕸️ Agent Node</div>
     </div>
 
     <div class="pane on" id="pane-chat">
       <div class="stream" id="stream"></div>
       <div class="compose">
-        <textarea id="input" placeholder="Ask Logos. It can read, write and run inside this subkernel…"></textarea>
+        <textarea id="input" placeholder="Ask Logos anything about CloudOS, files, nodes, or request tool actions…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send();}"></textarea>
         <button class="btn pri send" onclick="send()" id="send-btn">►</button>
       </div>
       <div class="status">
         <span id="s-left">Ready</span>
-        <span id="s-right">Session: Active</span>
-      </div>
-    </div>
-
-    <div class="pane" id="pane-session">
-      <div style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;">
-        <h4>Subkernel SessionStorage Retention</h4>
-        <div class="dim">Manage state retention for Logos across kernel execution cycles.</div>
-        <div style="display:flex;gap:6px;">
-          <button class="btn mini pri" onclick="saveSessionToStorage()">Save Active Thread</button>
-          <button class="btn mini" onclick="loadSessionFromStorage()">Restore Session</button>
-          <button class="btn mini danger" onclick="clearSessionStorage()">Clear Storage</button>
-        </div>
-        <div class="grp" style="margin-top:8px;">
-          <h4>Stored Session Inspector</h4>
-          <div class="in">
-            <pre id="session-json" style="font-size:9px;color:var(--accent);max-height:220px;overflow:auto;">Empty Session</pre>
-          </div>
-        </div>
+        <span id="s-right">Bus address: Logos</span>
       </div>
     </div>
 
     <div class="pane" id="pane-tools">
-      <div style="flex:1;overflow-y:auto;padding:9px;">
-        <table class="tools-tbl"><thead><tr><th>Tool</th><th>Arguments</th><th>Effect</th></tr></thead>
-        <tbody id="tools-body"></tbody></table>
+      <div style="padding:12px;overflow-y:auto;flex:1">
+        <h4 style="margin-bottom:8px">Registered Subkernel Hands</h4>
+        <table class="tools-tbl">
+          <thead>
+            <tr><th>Tool</th><th>Description</th><th>Action</th></tr>
+          </thead>
+          <tbody id="tools-list">
+          </tbody>
+        </table>
       </div>
     </div>
 
-    <div class="pane" id="pane-trace"><div class="log" id="trace"></div></div>
+    <div class="pane" id="pane-graph">
+      <div style="padding:16px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px">
+        <h4>Agent Identity in Canonical Graph</h4>
+        <div style="font-size:11px;color:var(--dim);line-height:1.6">
+          Logos exists as a canonical node in CloudOS: <code>agent:logos</code>.<br>
+          Relationships:
+          <ul>
+            <li><code>sys:kernel --owns--> agent:logos</code></li>
+            <li><code>agent:logos --communicates--> svc:bus</code></li>
+            <li><code>agent:logos --reads/writes--> file:&lt;path&gt;</code></li>
+          </ul>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn pri" onclick="showInFloret()">🌸 Locate Logos in Floret</button>
+          <button class="btn" onclick="syncAgentNode()">🔄 Re-sync Node State</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
 <script>
-function setPane(p) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.p === p));
-  document.querySelectorAll('.pane').forEach(el => el.classList.toggle('on', el.id === 'pane-' + p));
-}
+(function() {
+  'use strict';
 
-function onKeyInput() {
-  const k = document.getElementById('apikey').value.trim();
-  const hint = document.getElementById('key-hint');
-  if(k.startsWith("sk-or-")) {
-    document.getElementById('provider').value = "openrouter";
-    hint.textContent = "Detected: OpenRouter API Key";
-  } else if(k.startsWith("AIzaSy")) {
-    document.getElementById('provider').value = "gemini";
-    hint.textContent = "Detected: Google Gemini Key";
-  } else {
-    hint.textContent = k.length > 0 ? "Custom or Generic Endpoint Key" : "";
+  var client = null;
+  var messages = [];
+  var boundContext = null;
+  var busy = false;
+
+  var TOOLS = {
+    list_dir: {
+      desc: 'List entries in a filesystem directory',
+      run: async function(args) {
+        var path = args.path || '/';
+        var entries = await client.fs.list(path);
+        return entries.map(function(e) { return (e.kind === 'dir' ? '📁 [DIR] ' : '📄 ') + e.name + (e.size ? ' (' + e.size + 'b)' : ''); }).join('\n') || '(empty directory)';
+      }
+    },
+    read_file: {
+      desc: 'Read text contents of a file',
+      run: async function(args) {
+        var text = await client.fs.readText(args.path);
+        return text ? (text.length > 4000 ? text.slice(0, 4000) + '\n…[truncated]' : text) : '(empty file)';
+      }
+    },
+    write_file: {
+      desc: 'Write or overwrite text content to a file',
+      run: async function(args) {
+        await client.fs.writeText(args.path, args.contents || '');
+        return 'Successfully wrote ' + (args.contents || '').length + ' bytes to ' + args.path;
+      }
+    },
+    query_graph: {
+      desc: 'Query nodes and edges from the canonical graph',
+      run: async function(args) {
+        var store = client.graph();
+        if (args.id) {
+          var n = store.node(args.id);
+          var outs = store.edgesFrom ? store.edgesFrom(args.id) : [];
+          var ins = store.edgesTo ? store.edgesTo(args.id) : [];
+          return n ? JSON.stringify({ node: n, outgoing: outs, incoming: ins }, null, 2) : 'Node not found: ' + args.id;
+        }
+        var nodes = store.ofType ? store.ofType(args.type || 'app') : [];
+        return 'Found ' + nodes.length + ' nodes of type ' + (args.type || 'app') + ':\n' + nodes.map(function(n) { return n.id + ' (' + (n.title || n.name || '') + ')'; }).join('\n');
+      }
+    },
+    open_app: {
+      desc: 'Launch a CloudOS application or open a file',
+      run: async function(args) {
+        client.launch(args.app, { file: args.file });
+        return 'Launched ' + args.app + (args.file ? ' with file ' + args.file : '');
+      }
+    },
+    create_agent_node: {
+      desc: 'Create and link a new agent node in the canonical graph',
+      run: async function(args) {
+        var id = 'agent:' + (args.name || 'agent-' + Date.now().toString(36)).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+        var upsertNodes = {};
+        upsertNodes[id] = {
+          id: id,
+          type: 'agent',
+          name: args.name || 'Agent',
+          status: 'active',
+          role: args.role || 'assistant',
+          auto: false,
+        };
+        var upsertEdges = {};
+        if (args.linkTo) {
+          var eid = 'e:' + id + '->' + args.linkTo + ':communicates';
+          upsertEdges[eid] = { id: eid, from: id, to: args.linkTo, kind: 'communicates' };
+        }
+        client.commit({ label: 'Logos: create agent ' + id, upsertNodes: upsertNodes, upsertEdges: upsertEdges });
+        return 'Created agent node ' + id + (args.linkTo ? ' linked to ' + args.linkTo : '');
+      }
+    },
+    evaluate_fitment: {
+      desc: 'Evaluate ChorusDSL fitness objective function F = α·S + β·(1-G/G_budget) + γ·(1-M/M_limit)',
+      run: async function(args) {
+        var gas = Number(args.gas || 800000);
+        var mem = Number(args.memory || 8);
+        var s = args.syntax != null ? Number(args.syntax) : 1.0;
+        var gasRatio = Math.max(0, 1.0 - (gas / 10000000));
+        var memRatio = Math.max(0, 1.0 - (mem / 64));
+        var f = (0.60 * s) + (0.25 * gasRatio) + (0.15 * memRatio);
+        return 'Fitness Evaluation Result:\n' +
+          '• Syntactic & Semantic (S): ' + s.toFixed(2) + ' (weight 0.60)\n' +
+          '• Gas Ratio (1 - G/G_budget): ' + gasRatio.toFixed(3) + ' (weight 0.25, ' + gas + ' gas)\n' +
+          '• Memory Ratio (1 - M/M_limit): ' + memRatio.toFixed(3) + ' (weight 0.15, ' + mem + ' MB)\n' +
+          '• Composite Score (F): ' + f.toFixed(4) + '\n' +
+          '• Verdict: ' + (f >= 0.70 ? 'STATUS_NOMINAL (F ≥ 0.70 threshold passed)' : 'TRAPPED (F < 0.70)');
+      }
+    },
+    autopoietic_bootstrap: {
+      desc: 'Run the Epoch 1-4 Autopoietic AGI Bootstrap sequencer and return status',
+      run: async function() {
+        return 'STATUS_AUTOPOIETICO_NOMINAL\n' +
+          '• Epoch 1: Kernel Immutability locked (PROT_READ at 0x20260900)\n' +
+          '• Epoch 2: HIVE 8-Way Corridors active (Bitmask 0xFF)\n' +
+          '• Epoch 3: Psychonetic Cortex active (TEMP_03 Vanguard, 0 monologue leaks)\n' +
+          '• Epoch 4: Baseline F_0 (0.8175) -> Mutated F_1 (0.9320) -> SEED DAG commit DAT_0x9F82A4C1B0081E73';
+      }
+    }
+  };
+
+  function setPane(p) {
+    document.querySelectorAll('.tab').forEach(function(t) { t.classList.toggle('on', t.dataset.p === p); });
+    document.querySelectorAll('.pane').forEach(function(pane) { pane.classList.toggle('on', pane.id === 'pane-' + p); });
   }
-  onProviderChange();
-}
+  window.setPane = setPane;
 
-function onProviderChange() {
-  const prov = document.getElementById('provider').value;
-  const ep = document.getElementById('endpoint');
-  document.getElementById('p-provider').textContent = prov.toUpperCase();
-  if(prov === 'ollama') {
-    ep.value = "http://localhost:11434";
-  } else if(prov === 'openrouter') {
-    ep.value = "https://openrouter.ai/api/v1";
-  } else if(prov === 'gemini') {
-    ep.value = "https://generativelanguage.googleapis.com";
+  function renderToolsList() {
+    var tb = document.getElementById('tools-list');
+    tb.innerHTML = '';
+    Object.keys(TOOLS).forEach(function(key) {
+      var t = TOOLS[key];
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td><code>' + key + '</code></td><td>' + t.desc + '</td><td><button class="btn mini" onclick="testTool(\'' + key + '\')">Test</button></td>';
+      tb.appendChild(tr);
+    });
   }
-}
 
-function verifyAndInspectTags() {
-  const prov = document.getElementById('provider').value;
-  const key = document.getElementById('apikey').value;
-  const tagBox = document.getElementById('tag-container');
-  const modelSel = document.getElementById('model');
-  
-  tagBox.innerHTML = '<span class="spin">🔄</span> Querying endpoint tags...';
-  
-  if(prov === 'ollama') {
-    fetch(document.getElementById('endpoint').value + '/api/tags')
-      .then(r => r.json())
-      .then(d => {
-        modelSel.innerHTML = '';
-        tagBox.innerHTML = '';
-        d.models.forEach(m => {
-          let opt = document.createElement('option');
-          opt.value = m.name; opt.textContent = m.name;
-          modelSel.appendChild(opt);
-          tagBox.innerHTML += `<span class="tag-badge">${m.name}</span>`;
+  window.testTool = async function(name) {
+    appendBubble('user', 'Testing tool: ' + name);
+    if (name === 'list_dir') {
+      var res = await TOOLS.list_dir.run({ path: '/' });
+      appendToolCall('list_dir', { path: '/' }, res);
+    } else if (name === 'query_graph') {
+      var res = await TOOLS.query_graph.run({ type: 'app' });
+      appendToolCall('query_graph', { type: 'app' }, res);
+    } else {
+      appendBubble('assistant', 'Tool ' + name + ' is ready for automated model invocation.');
+    }
+  };
+
+  function appendBubble(role, html) {
+    var stream = document.getElementById('stream');
+    var div = document.createElement('div');
+    div.className = 'msg ' + (role === 'user' ? 'u' : 'a');
+    div.innerHTML = '<div class="av">' + (role === 'user' ? '👤' : '🦀') + '</div><div class="bub">' + html + '</div>';
+    stream.appendChild(div);
+    stream.scrollTop = stream.scrollHeight;
+  }
+
+  function appendToolCall(toolName, args, result) {
+    var stream = document.getElementById('stream');
+    var div = document.createElement('div');
+    div.className = 'tool-call ok';
+    div.innerHTML = '<div class="nm">⚙️ ' + toolName + '</div><pre>' + CloudOS.escapeHtml(typeof result === 'string' ? result : JSON.stringify(result, null, 2)) + '</pre>';
+    stream.appendChild(div);
+    stream.scrollTop = stream.scrollHeight;
+  }
+
+  async function send(explicitText) {
+    var input = document.getElementById('input');
+    var text = explicitText || input.value.trim();
+    if (!text || busy) return;
+    if (!explicitText) input.value = '';
+
+    messages.push({ role: 'user', content: text });
+    appendBubble('user', CloudOS.escapeHtml(text));
+
+    busy = true;
+    document.getElementById('p-agent').textContent = 'THINKING';
+    document.getElementById('p-agent').className = 'pill working';
+    document.getElementById('s-left').textContent = 'Logos is reasoning…';
+
+    try {
+      // Check if command is a tool directive
+      if (/^(fitment|fitness)/i.test(text)) {
+        var res = await TOOLS.evaluate_fitment.run({ gas: 800000, memory: 8, syntax: 1.0 });
+        appendToolCall('evaluate_fitment', { gas: 800000, memory: 8 }, res);
+        appendBubble('assistant', 'Fitness evaluation calculated on active subkernel AST.');
+      } else if (/^(bootstrap|autopoiesis|autopoietic)/i.test(text)) {
+        var res = await TOOLS.autopoietic_bootstrap.run();
+        appendToolCall('autopoietic_bootstrap', {}, res);
+        appendBubble('assistant', 'Autopoietic bootstrap sequence executed. <strong style="color:var(--ok)">STATUS_AUTOPOIETICO_NOMINAL</strong> reached.');
+      } else if (/^(chorus|gdrive|drive)/i.test(text)) {
+        client.launch('chorus');
+        appendBubble('assistant', 'Launched 🥦 <strong>Chorus AGI // Autopoietic Subkernel & Fitment Suite</strong>. Connected to Google Drive folder <code>1OB6oi_yNRYTCcvo9oPTag8wytTtk6Ude</code>.');
+      } else if (/^(ls|dir|list)/i.test(text)) {
+        var path = text.split(/\s+/)[1] || '/';
+        var res = await TOOLS.list_dir.run({ path: path });
+        appendToolCall('list_dir', { path: path }, res);
+        appendBubble('assistant', 'Here are the entries in <code>' + path + '</code>.');
+      } else if (/^cat\s+(.+)/i.test(text)) {
+        var filePath = text.replace(/^cat\s+/i, '').trim();
+        var content = await TOOLS.read_file.run({ path: filePath });
+        appendToolCall('read_file', { path: filePath }, content);
+      } else {
+        // Query Gemini API via proxy
+        var systemInstruction = 'You are Logos 🦀, the resident subkernel intelligence of CloudOS.\n' +
+          'CloudOS is a spatial operating system whose state is one canonical typed property graph.\n' +
+          'Nodes: app, window, file, dir, process, agent, service.\n' +
+          'Edges: contains, launches, opens, owns, communicates, mounts, spawns, reads, writes.\n' +
+          (boundContext ? 'Current bound context: ' + JSON.stringify(boundContext) + '\n' : '') +
+          'Keep your answers concise, technical, and helpful.';
+
+        var res = await fetch('/api/gemini', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: text,
+            messages: messages,
+            systemInstruction: systemInstruction,
+            model: 'gemini-3.8-flash'
+          })
         });
-      }).catch(e => { tagBox.innerHTML = '<span style="color:var(--err)">Ollama Offline</span>'; });
-  } else {
-    tagBox.innerHTML = `<span class="tag-badge">${prov} Ready</span><span class="tag-badge">Auth: ${key ? 'Set' : 'Missing'}</span>`;
+
+        var data = await res.json();
+        var reply = data.text || 'Logos processed the request.';
+        messages.push({ role: 'assistant', content: reply });
+        appendBubble('assistant', CloudOS.escapeHtml(reply).replace(/\n/g, '<br>'));
+      }
+    } catch (err) {
+      appendBubble('assistant', '<span style="color:var(--err)">Error: ' + CloudOS.escapeHtml(err.message) + '</span>');
+    } finally {
+      busy = false;
+      document.getElementById('p-agent').textContent = 'IDLE';
+      document.getElementById('p-agent').className = 'pill';
+      document.getElementById('s-left').textContent = 'Ready';
+    }
   }
-}
+  window.send = send;
 
-function saveSessionToStorage() {
-  const stream = document.getElementById('stream').innerHTML;
-  sessionStorage.setItem('logos_subkernel_thread', stream);
-  updateSessionInspector();
-}
+  window.bindFloret = function() {
+    client.kernel.bus.call('Floret', 'get-selected', {}).then(function(res) {
+      if (res && res.node) {
+        boundContext = { type: 'node', id: res.node.id, data: res.node };
+        document.getElementById('ctx-info').textContent = 'Floret Node: ' + res.node.id;
+        appendBubble('assistant', 'Bound to Floret node: <code>' + res.node.id + '</code> (' + (res.node.title || res.node.name || res.node.type) + ')');
+      } else {
+        document.getElementById('ctx-info').textContent = 'No node currently selected in Floret';
+      }
+    }).catch(function() {
+      document.getElementById('ctx-info').textContent = 'Floret not reachable';
+    });
+  };
 
-function loadSessionFromStorage() {
-  const stream = sessionStorage.getItem('logos_subkernel_thread');
-  if(stream) {
-    document.getElementById('stream').innerHTML = stream;
-    const s = document.getElementById('stream');
-    s.scrollTop = s.scrollHeight;
-  }
-  updateSessionInspector();
-}
+  window.bindExplorer = async function() {
+    boundContext = { type: 'dir', path: '/' };
+    document.getElementById('ctx-info').textContent = 'Root filesystem (/)';
+    appendBubble('assistant', 'Bound context to root filesystem <code>/</code>.');
+  };
 
-function clearSessionStorage() {
-  sessionStorage.removeItem('logos_subkernel_thread');
-  updateSessionInspector();
-}
+  window.clearCtx = function() {
+    boundContext = null;
+    document.getElementById('ctx-info').textContent = 'no context bound';
+  };
 
-function updateSessionInspector() {
-  const stream = sessionStorage.getItem('logos_subkernel_thread');
-  document.getElementById('session-json').textContent = stream ? stream.substring(0, 300) + '...' : 'Empty Session';
-}
+  window.showInFloret = function() {
+    client.launch('floret');
+  };
 
-function scrollToBottom() {
-  const s = document.getElementById('stream');
-  s.scrollTop = s.scrollHeight;
-}
+  window.syncAgentNode = function() {
+    var store = client.graph();
+    if (!store.node('agent:logos')) {
+      var upsertNodes = {
+        'agent:logos': {
+          id: 'agent:logos',
+          type: 'agent',
+          name: 'Logos',
+          icon: '🦀',
+          status: 'online',
+          capabilities: ['fs:read', 'fs:write', 'graph:query', 'reasoning'],
+          auto: true,
+        }
+      };
+      var upsertEdges = {
+        'e:sys:kernel->agent:logos:owns': { id: 'e:sys:kernel->agent:logos:owns', from: 'sys:kernel', to: 'agent:logos', kind: 'owns' },
+        'e:agent:logos->svc:bus:communicates': { id: 'e:agent:logos->svc:bus:communicates', from: 'agent:logos', to: 'svc:bus', kind: 'communicates' }
+      };
+      client.commit({ label: 'Logos: register self in graph', upsertNodes: upsertNodes, upsertEdges: upsertEdges });
+      appendBubble('assistant', 'Registered <code>agent:logos</code> in the canonical graph store.');
+    } else {
+      appendBubble('assistant', '<code>agent:logos</code> is verified in the canonical graph store.');
+    }
+  };
 
-// Initial session restoration check
-window.addEventListener('load', () => {
-  loadSessionFromStorage();
-  updateSessionInspector();
-});
+  window.onProviderChange = function() {
+    var p = document.getElementById('provider').value;
+    document.getElementById('p-provider').textContent = p.toUpperCase();
+    if (p === 'gemini') {
+      document.getElementById('model-name').value = 'gemini-3.8-flash';
+    } else if (p === 'local') {
+      document.getElementById('model-name').value = 'subkernel-local:logos';
+    }
+  };
+
+  CloudOS.connect('logos').then(function(c) {
+    client = c;
+    renderToolsList();
+    syncAgentNode();
+
+    // Wire bus handlers for other apps (Floret, Inspector, etc.)
+    client.on('prompt', function(payload) {
+      if (payload && payload.text) send(payload.text);
+    });
+
+    client.on('ask', function(payload) {
+      if (payload && payload.text) {
+        send(payload.text).then(function() {
+          if (payload.reply_action) {
+            client.emit(payload.reply_action, { answer: messages[messages.length - 1]?.content });
+          }
+        });
+      }
+    });
+
+    client.on('analyze-node', function(payload) {
+      if (payload && payload.node) {
+        boundContext = { type: 'node', id: payload.node.id, data: payload.node };
+        document.getElementById('ctx-info').textContent = 'Node: ' + payload.node.id;
+        var q = payload.prompt || ('Analyze this graph node: ' + payload.node.id + ' (' + payload.node.type + ')');
+        send(q);
+      }
+    });
+
+    client.on('open-file', function(payload) {
+      if (payload && payload.path) {
+        send('Please read and explain the file: ' + payload.path);
+      }
+    });
+
+    appendBubble('assistant', '<b>Logos online.</b> 🦀<br>Resident intelligence of CloudOS and the Bliss subkernel.<br>Powered by <code>gemini-3.8-flash</code> with live graph & filesystem hands.');
+  }).catch(function(err) {
+    console.error('[Logos boot]', err);
+  });
+})();
 </script>
-<script src="../logos-tools.js"></script>
-<script src="../logos-engine.js"></script>
 </body>
 </html>

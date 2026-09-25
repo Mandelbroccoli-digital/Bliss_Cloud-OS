@@ -84,14 +84,18 @@ body.xp-mode {
 #icon-layer {
   position: absolute;
   inset: 0;
-  padding: 14px;
+  width: 100%;
+  height: 100%;
+  padding: 16px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, 92px);
-  grid-auto-rows: 92px;
-  grid-auto-flow: column;
-  gap: 6px;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--icon-container-width, 92px), 1fr));
+  grid-auto-rows: minmax(var(--icon-container-height, 100px), max-content);
+  grid-auto-flow: dense;
   align-content: start;
+  justify-items: center;
   z-index: 1;
+  box-sizing: border-box;
 }
 
 .desk-icon {
@@ -99,17 +103,22 @@ body.xp-mode {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
+  width: 100%;
+  max-width: var(--icon-container-width, 100px);
   gap: 6px;
   padding: 8px 4px;
+  box-sizing: border-box;
   border: 1px solid transparent;
   border-radius: 4px;
   cursor: pointer;
   color: #fff;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
-  font-size: 11px;
+  font-size: var(--icon-font-size, 11px);
   line-height: 1.2;
   text-align: center;
   overflow: hidden;
+  user-select: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 body.xp-mode .desk-icon {
@@ -127,7 +136,12 @@ body.xp-mode .desk-icon {
 }
 
 .desk-icon .ico {
-  font-size: 30px;
+  font-size: var(--icon-size, 32px);
+  width: var(--icon-size, 32px);
+  height: var(--icon-size, 32px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.5));
 }
 
@@ -138,6 +152,7 @@ body.xp-mode .desk-icon {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  word-break: break-word;
 }
 
 #window-layer {
@@ -553,8 +568,19 @@ body.xp-mode #ctx-menu {
   display: flex;
 }
 
+.ctx-header {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  padding: 5px 9px 2px;
+  font-weight: 700;
+  user-select: none;
+}
+
 .ctx-item {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 14px;
   padding: 5px 9px;
@@ -565,6 +591,15 @@ body.xp-mode #ctx-menu {
 
 .ctx-item:hover {
   background: var(--accent);
+  color: #fff;
+}
+
+.ctx-item.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.ctx-item.active:hover {
   color: #fff;
 }
 
